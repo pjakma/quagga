@@ -81,10 +81,11 @@ struct memory_list memory_list_zebra[] =
   { MTYPE_VRF,			"VRF"				},
   { MTYPE_VRF_NAME,		"VRF name"			},
   { MTYPE_NEXTHOP,		"Nexthop"			},
+  { MTYPE_NEXTHOP_ADDR,		"Nexthop Address"		},
   { MTYPE_RIB,			"RIB"				},
   { MTYPE_RIB_QUEUE,		"RIB process work queue"	},
-  { MTYPE_STATIC_IPV4,		"Static IPv4 route"		},
-  { MTYPE_STATIC_IPV6,		"Static IPv6 route"		},
+  { MTYPE_STATIC_ROUTE,		"Static route"			},
+  { MTYPE_STATIC_ROUTE_IFNAME,	"Static route ifname string"	},
   { -1, NULL },
 };
 

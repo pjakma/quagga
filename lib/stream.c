@@ -666,6 +666,28 @@ stream_put_in_addr (struct stream *s, struct in_addr *addr)
   return sizeof (u_int32_t);
 }
 
+/* Put address of prefix to stream */
+int
+stream_put_prefix_addr (struct stream *s, struct prefix *p)
+{
+  size_t asize;
+  
+  STREAM_VERIFY_SANE(s);
+  
+  asize = PREFIX_MAX_PLEN(p) / 8;
+  
+  if (STREAM_WRITEABLE (s) < asize)
+    {
+      STREAM_BOUND_WARN (s, "put");
+      return 0;
+    }
+  
+  memcpy (s->data + s->endp, &p->u.prefix, asize);
+  s->endp += asize;
+  
+  return asize;
+}
+
 /* Put prefix by nlri type format. */
 int
 stream_put_prefix (struct stream *s, struct prefix *p)

@@ -42,6 +42,8 @@ zebra_static_ipv4 (struct vty *vty, int add_cmd, const char *dest_str,
   struct in_addr gate;
   struct in_addr mask;
   const char *ifname;
+  struct prefix na;
+  
   u_char flag = 0;
   
   ret = str2prefix (dest_str, &p);
@@ -81,9 +83,9 @@ zebra_static_ipv4 (struct vty *vty, int add_cmd, const char *dest_str,
           return CMD_WARNING;
         }
       if (add_cmd)
-        static_add_ipv4 (&p, NULL, NULL, ZEBRA_FLAG_BLACKHOLE, distance, 0);
+        static_add (&p, NULL, NULL, ZEBRA_FLAG_BLACKHOLE, distance, 0);
       else
-        static_delete_ipv4 (&p, NULL, NULL, distance, 0);
+        static_delete (&p, NULL, NULL, distance, 0);
       return CMD_SUCCESS;
     }
 
@@ -107,9 +109,9 @@ zebra_static_ipv4 (struct vty *vty, int add_cmd, const char *dest_str,
   if (gate_str == NULL)
   {
     if (add_cmd)
-      static_add_ipv4 (&p, NULL, NULL, flag, distance, 0);
+      static_add (&p, NULL, NULL, flag, distance, 0);
     else
-      static_delete_ipv4 (&p, NULL, NULL, distance, 0);
+      static_delete (&p, NULL, NULL, distance, 0);
 
     return CMD_SUCCESS;
   }
@@ -121,11 +123,15 @@ zebra_static_ipv4 (struct vty *vty, int add_cmd, const char *dest_str,
     ifname = NULL;
   else
     ifname = gate_str;
-
+  
+  na.family = AF_INET;
+  na.prefixlen = IPV4_MAX_PREFIXLEN;
+  PREFIX_IN_ADDR(&na) = gate;
+  
   if (add_cmd)
-    static_add_ipv4 (&p, ifname ? NULL : &gate, ifname, flag, distance, 0);
+    static_add (&p, ifname ? NULL : &na, ifname, flag, distance, 0);
   else
-    static_delete_ipv4 (&p, ifname ? NULL : &gate, ifname, distance, 0);
+    static_delete (&p, ifname ? NULL : &na, ifname, distance, 0);
 
   return CMD_SUCCESS;
 }
@@ -528,18 +534,69 @@ DEFUN (no_ip_protocol,
   return CMD_SUCCESS;
 }
 
+/* Print the nexthop, in 'show ip route' style line */
+static void
+vty_show_nexthop_line (struct vty *vty, struct nexthop *nexthop)
+{
+  char buf[INET6_ADDRSTRLEN + 3];
+  
+  do {
+    if (CHECK_FLAG (nexthop->flags, NEXTHOP_FLAG_BLACKHOLE))
+      {
+        vty_out (vty, " directly connected, Null0");
+        break;
+      }
+    
+    if (nexthop->gate)
+      {
+        prefix2str (nexthop->gate, buf, sizeof(buf));
+        vty_out (vty, " %s", buf);
+      }
+    
+    if (nexthop->ifindex && nexthop->gate)
+        vty_out (vty, ", via %s", ifindex2ifname (nexthop->ifindex));
+
+    if (nexthop->ifindex && !nexthop->gate)
+      vty_out (vty, " directly connected, %s",
+               ifindex2ifname (nexthop->ifindex));
+  } while (0);
+  
+  if (! CHECK_FLAG (nexthop->flags, NEXTHOP_FLAG_ACTIVE))
+    vty_out (vty, " inactive");
+
+  if (CHECK_FLAG (nexthop->flags, NEXTHOP_FLAG_RECURSIVE))
+    {
+      vty_out (vty, " (recursive");
+        
+        if (nexthop->rgate)
+          {
+            prefix2str (nexthop->rgate, buf, sizeof(buf));
+            vty_out (vty, " via %s)", buf);
+          }
+        else if (nexthop->rifindex)
+          vty_out (vty, " is directly connected, %s)",
+                   ifindex2ifname (nexthop->rifindex));
+    }
+  if (nexthop->src)
+    {
+      prefix2str (nexthop->src, buf, sizeof(buf));
+      vty_out (vty, ", src %s", buf);
+    }
+}
+
 /* New RIB.  Detailed information for IPv4 route. */
 static void
 vty_show_ip_route_detail (struct vty *vty, struct route_node *rn)
 {
   struct rib *rib;
   struct nexthop *nexthop;
+  char buf[INET6_ADDRSTRLEN + 3];
 
   for (rib = rn->info; rib; rib = rib->next)
     {
-      vty_out (vty, "Routing entry for %s/%d%s", 
-	       inet_ntoa (rn->p.u.prefix4), rn->p.prefixlen,
-	       VTY_NEWLINE);
+      prefix2str (&rn->p, buf, sizeof(buf));
+      vty_out (vty, "Routing entry for %s%s", 
+	       buf, VTY_NEWLINE);
       vty_out (vty, "  Known via \"%s\"", zebra_route_string (rib->type));
       vty_out (vty, ", distance %d, metric %d", rib->distance, rib->metric);
       if (CHECK_FLAG (rib->flags, ZEBRA_FLAG_SELECTED))
@@ -554,10 +611,7 @@ vty_show_ip_route_detail (struct vty *vty, struct route_node *rn)
 
 #define ONE_DAY_SECOND 60*60*24
 #define ONE_WEEK_SECOND 60*60*24*7
-      if (rib->type == ZEBRA_ROUTE_RIP
-	  || rib->type == ZEBRA_ROUTE_OSPF
-	  || rib->type == ZEBRA_ROUTE_ISIS
-	  || rib->type == ZEBRA_ROUTE_BGP)
+      if (rib->type > ZEBRA_ROUTE_CONNECT)
 	{
 	  time_t uptime;
 	  struct tm *tm;
@@ -583,81 +637,11 @@ vty_show_ip_route_detail (struct vty *vty, struct route_node *rn)
 
       for (nexthop = rib->nexthop; nexthop; nexthop = nexthop->next)
 	{
-          char addrstr[32];
-
 	  vty_out (vty, "  %c",
 		   CHECK_FLAG (nexthop->flags, NEXTHOP_FLAG_FIB) ? '*' : ' ');
-
-	  switch (nexthop->type)
-	    {
-	    case NEXTHOP_TYPE_IPV4:
-	    case NEXTHOP_TYPE_IPV4_IFINDEX:
-	      vty_out (vty, " %s", inet_ntoa (nexthop->gate.ipv4));
-	      if (nexthop->ifindex)
-		vty_out (vty, ", via %s", ifindex2ifname (nexthop->ifindex));
-	      break;
-	    case NEXTHOP_TYPE_IFINDEX:
-	      vty_out (vty, " directly connected, %s",
-		       ifindex2ifname (nexthop->ifindex));
-	      break;
-	    case NEXTHOP_TYPE_IFNAME:
-	      vty_out (vty, " directly connected, %s", nexthop->ifname);
-	      break;
-      case NEXTHOP_TYPE_BLACKHOLE:
-        vty_out (vty, " directly connected, Null0");
-        break;
-      default:
-	      break;
-	    }
-	  if (! CHECK_FLAG (nexthop->flags, NEXTHOP_FLAG_ACTIVE))
-	    vty_out (vty, " inactive");
-
-	  if (CHECK_FLAG (nexthop->flags, NEXTHOP_FLAG_RECURSIVE))
-	    {
-	      vty_out (vty, " (recursive");
-		
-	      switch (nexthop->rtype)
-		{
-		case NEXTHOP_TYPE_IPV4:
-		case NEXTHOP_TYPE_IPV4_IFINDEX:
-		  vty_out (vty, " via %s)", inet_ntoa (nexthop->rgate.ipv4));
-		  break;
-		case NEXTHOP_TYPE_IFINDEX:
-		case NEXTHOP_TYPE_IFNAME:
-		  vty_out (vty, " is directly connected, %s)",
-			   ifindex2ifname (nexthop->rifindex));
-		  break;
-		default:
-		  break;
-		}
-	    }
-	  switch (nexthop->type)
-            {
-            case NEXTHOP_TYPE_IPV4:
-            case NEXTHOP_TYPE_IPV4_IFINDEX:
-            case NEXTHOP_TYPE_IPV4_IFNAME:
-              if (nexthop->src.ipv4.s_addr)
-                {
-		  if (inet_ntop(AF_INET, &nexthop->src.ipv4, addrstr,
-		      sizeof addrstr))
-                    vty_out (vty, ", src %s", addrstr);
-                }
-              break;
-#ifdef HAVE_IPV6
-            case NEXTHOP_TYPE_IPV6:
-            case NEXTHOP_TYPE_IPV6_IFINDEX:
-            case NEXTHOP_TYPE_IPV6_IFNAME:
-              if (!IPV6_ADDR_SAME(&nexthop->src.ipv6, &in6addr_any))
-                {
-		  if (inet_ntop(AF_INET6, &nexthop->src.ipv6, addrstr,
-		      sizeof addrstr))
-                    vty_out (vty, ", src %s", addrstr);
-                }
-              break;
-#endif /* HAVE_IPV6 */
-            default:
-	       break;
-            }
+          
+          vty_show_nexthop_line (vty, nexthop);
+          
 	  vty_out (vty, "%s", VTY_NEWLINE);
 	}
       vty_out (vty, "%s", VTY_NEWLINE);
@@ -697,85 +681,15 @@ vty_show_ip_route (struct vty *vty, struct route_node *rn, struct rib *rib)
 		 CHECK_FLAG (nexthop->flags, NEXTHOP_FLAG_FIB)
 		 ? '*' : ' ',
 		 len - 3, ' ');
-
-      switch (nexthop->type)
-	{
-	case NEXTHOP_TYPE_IPV4:
-	case NEXTHOP_TYPE_IPV4_IFINDEX:
-	  vty_out (vty, " via %s", inet_ntoa (nexthop->gate.ipv4));
-	  if (nexthop->ifindex)
-	    vty_out (vty, ", %s", ifindex2ifname (nexthop->ifindex));
-	  break;
-	case NEXTHOP_TYPE_IFINDEX:
-	  vty_out (vty, " is directly connected, %s",
-		   ifindex2ifname (nexthop->ifindex));
-	  break;
-	case NEXTHOP_TYPE_IFNAME:
-	  vty_out (vty, " is directly connected, %s", nexthop->ifname);
-	  break;
-  case NEXTHOP_TYPE_BLACKHOLE:
-    vty_out (vty, " is directly connected, Null0");
-    break;
-  default:
-	  break;
-	}
-      if (! CHECK_FLAG (nexthop->flags, NEXTHOP_FLAG_ACTIVE))
-	vty_out (vty, " inactive");
-
-      if (CHECK_FLAG (nexthop->flags, NEXTHOP_FLAG_RECURSIVE))
-	{
-	  vty_out (vty, " (recursive");
-		
-	  switch (nexthop->rtype)
-	    {
-	    case NEXTHOP_TYPE_IPV4:
-	    case NEXTHOP_TYPE_IPV4_IFINDEX:
-	      vty_out (vty, " via %s)", inet_ntoa (nexthop->rgate.ipv4));
-	      break;
-	    case NEXTHOP_TYPE_IFINDEX:
-	    case NEXTHOP_TYPE_IFNAME:
-	      vty_out (vty, " is directly connected, %s)",
-		       ifindex2ifname (nexthop->rifindex));
-	      break;
-	    default:
-	      break;
-	    }
-	}
-      switch (nexthop->type)
-        {
-          case NEXTHOP_TYPE_IPV4:
-          case NEXTHOP_TYPE_IPV4_IFINDEX:
-          case NEXTHOP_TYPE_IPV4_IFNAME:
-            if (nexthop->src.ipv4.s_addr)
-              {
-		if (inet_ntop(AF_INET, &nexthop->src.ipv4, buf, sizeof buf))
-                  vty_out (vty, ", src %s", buf);
-              }
-            break;
-#ifdef HAVE_IPV6
-          case NEXTHOP_TYPE_IPV6:
-          case NEXTHOP_TYPE_IPV6_IFINDEX:
-          case NEXTHOP_TYPE_IPV6_IFNAME:
-            if (!IPV6_ADDR_SAME(&nexthop->src.ipv6, &in6addr_any))
-              {
-		if (inet_ntop(AF_INET6, &nexthop->src.ipv6, buf, sizeof buf))
-                  vty_out (vty, ", src %s", buf);
-              }
-            break;
-#endif /* HAVE_IPV6 */
-          default:
-	    break;
-        }
-
+      
+      vty_show_nexthop_line (vty, nexthop);
+      
       if (CHECK_FLAG (rib->flags, ZEBRA_FLAG_BLACKHOLE))
                vty_out (vty, ", bh");
       if (CHECK_FLAG (rib->flags, ZEBRA_FLAG_REJECT))
                vty_out (vty, ", rej");
 
-      if (rib->type == ZEBRA_ROUTE_RIP
-	  || rib->type == ZEBRA_ROUTE_OSPF
-	  || rib->type == ZEBRA_ROUTE_ISIS
-	  || rib->type == ZEBRA_ROUTE_BGP)
+      if (rib->type > ZEBRA_ROUTE_CONNECT)
 	{
 	  time_t uptime;
 	  struct tm *tm;
@@ -1138,51 +1052,61 @@ DEFUN (show_ip_route_summary,
   return CMD_SUCCESS;
 }
 
-/* Write IPv4 static route configuration. */
+/* Write static route configuration. */
 static int
-static_config_ipv4 (struct vty *vty)
+static_config (struct vty *vty, afi_t afi)
 {
   struct route_node *rn;
-  struct static_ipv4 *si;  
+  struct static_route *si;  
   struct route_table *stable;
   int write;
-
+  
   write = 0;
 
   /* Lookup table.  */
-  stable = vrf_static_table (AFI_IP, SAFI_UNICAST, 0);
+  stable = vrf_static_table (afi, SAFI_UNICAST, 0);
   if (! stable)
     return -1;
 
   for (rn = route_top (stable); rn; rn = route_next (rn))
     for (si = rn->info; si; si = si->next)
       {
-        vty_out (vty, "ip route %s/%d", inet_ntoa (rn->p.u.prefix4),
-                 rn->p.prefixlen);
-
-        switch (si->type)
-          {
-            case STATIC_IPV4_GATEWAY:
-              vty_out (vty, " %s", inet_ntoa (si->gate.ipv4));
-              break;
-            case STATIC_IPV4_IFNAME:
-              vty_out (vty, " %s", si->gate.ifname);
-              break;
-            case STATIC_IPV4_BLACKHOLE:
-              vty_out (vty, " Null0");
-              break;
-          }
+        char buf[INET6_ADDRSTRLEN];
+        prefix2str (&rn->p, buf, sizeof(buf));
         
-        /* flags are incompatible with STATIC_IPV4_BLACKHOLE */
-        if (si->type != STATIC_IPV4_BLACKHOLE)
+        vty_out (vty, "%s route %s",
+                 (afi == AFI_IP ? "ip" : "ipv6"),
+                 buf);
+        
+        if (si->flags)
           {
-            if (CHECK_FLAG(si->flags, ZEBRA_FLAG_REJECT))
-              vty_out (vty, " %s", "reject");
-
-            if (CHECK_FLAG(si->flags, ZEBRA_FLAG_BLACKHOLE))
-              vty_out (vty, " %s", "blackhole");
+            switch (si->flags)
+              {
+                case ZEBRA_FLAG_BLACKHOLE:
+                  vty_out (vty, " blackhole");
+                  break;
+                case ZEBRA_FLAG_REJECT:
+                  vty_out (vty, " reject");
+                  break;
+                default:
+                  assert ("Unsupported flag in static route!" == NULL);
+              }
           }
-
+        else
+          {
+            char buf[INET6_ADDRSTRLEN];
+            
+            if (si->gate)
+              {
+                inet_ntop (si->gate->family, &si->gate->u.prefix,
+                           buf, sizeof(buf));
+                vty_out (vty, " %s", buf);
+              }
+            
+            if (si->ifname)
+              vty_out (vty, " %s", si->ifname);
+          }
+              
         if (si->distance != ZEBRA_STATIC_DISTANCE_DEFAULT)
           vty_out (vty, " %d", si->distance);
 
@@ -1235,7 +1159,8 @@ static_ipv6_func (struct vty *vty, int add_cmd, const char *dest_str,
   struct prefix p;
   struct in6_addr *gate = NULL;
   struct in6_addr gate_addr;
-  u_char type = 0;
+  struct prefix na;
+  struct prefix *pna = NULL;
   int table = 0;
   u_char flag = 0;
   
@@ -1276,6 +1201,10 @@ static_ipv6_func (struct vty *vty, int add_cmd, const char *dest_str,
      nexthop address other case gate is treated as interface name. */
   ret = inet_pton (AF_INET6, gate_str, &gate_addr);
 
+  na.family = AF_INET6;
+  na.prefixlen = IPV6_MAX_PREFIXLEN;
+  PREFIX_IN6_ADDR(&na) = gate_addr;
+
   if (ifname)
     {
       /* When ifname is specified.  It must be come with gateway
@@ -1285,27 +1214,23 @@ static_ipv6_func (struct vty *vty, int add_cmd, const char *dest_str,
 	  vty_out (vty, "%% Malformed address%s", VTY_NEWLINE);
 	  return CMD_WARNING;
 	}
-      type = STATIC_IPV6_GATEWAY_IFNAME;
       gate = &gate_addr;
     }
   else
     {
       if (ret == 1)
-	{
-	  type = STATIC_IPV6_GATEWAY;
 	  gate = &gate_addr;
-	}
       else
-	{
-	  type = STATIC_IPV6_IFNAME;
 	  ifname = gate_str;
-	}
     }
-
+  
+  if (gate)
+    pna = &na;
+  
   if (add_cmd)
-    static_add_ipv6 (&p, type, gate, ifname, flag, distance, table);
+    static_add (&p, pna, ifname, flag, distance, table);
   else
-    static_delete_ipv6 (&p, type, gate, ifname, distance, table);
+    static_delete (&p, pna, ifname, distance, table);
 
   return CMD_SUCCESS;
 }
@@ -1529,243 +1454,6 @@ DEFUN (no_ipv6_route_ifname_flags_pref,
   return static_ipv6_func (vty, 0, argv[0], argv[1], argv[2], argv[3], argv[4]);
 }
 
-/* New RIB.  Detailed information for IPv6 route. */
-static void
-vty_show_ipv6_route_detail (struct vty *vty, struct route_node *rn)
-{
-  struct rib *rib;
-  struct nexthop *nexthop;
-  char buf[BUFSIZ];
-
-  for (rib = rn->info; rib; rib = rib->next)
-    {
-      vty_out (vty, "Routing entry for %s/%d%s", 
-	       inet_ntop (AF_INET6, &rn->p.u.prefix6, buf, BUFSIZ),
-	       rn->p.prefixlen,
-	       VTY_NEWLINE);
-      vty_out (vty, "  Known via \"%s\"", zebra_route_string (rib->type));
-      vty_out (vty, ", distance %d, metric %d", rib->distance, rib->metric);
-      if (CHECK_FLAG (rib->flags, ZEBRA_FLAG_SELECTED))
-	vty_out (vty, ", best");
-      if (rib->refcnt)
-	vty_out (vty, ", refcnt %ld", rib->refcnt);
-      if (CHECK_FLAG (rib->flags, ZEBRA_FLAG_BLACKHOLE))
-       vty_out (vty, ", blackhole");
-      if (CHECK_FLAG (rib->flags, ZEBRA_FLAG_REJECT))
-       vty_out (vty, ", reject");
-      vty_out (vty, "%s", VTY_NEWLINE);
-
-#define ONE_DAY_SECOND 60*60*24
-#define ONE_WEEK_SECOND 60*60*24*7
-      if (rib->type == ZEBRA_ROUTE_RIPNG
-	  || rib->type == ZEBRA_ROUTE_OSPF6
-	  || rib->type == ZEBRA_ROUTE_ISIS
-	  || rib->type == ZEBRA_ROUTE_BGP)
-	{
-	  time_t uptime;
-	  struct tm *tm;
-
-	  uptime = time (NULL);
-	  uptime -= rib->uptime;
-	  tm = gmtime (&uptime);
-
-	  vty_out (vty, "  Last update ");
-
-	  if (uptime < ONE_DAY_SECOND)
-	    vty_out (vty,  "%02d:%02d:%02d", 
-		     tm->tm_hour, tm->tm_min, tm->tm_sec);
-	  else if (uptime < ONE_WEEK_SECOND)
-	    vty_out (vty, "%dd%02dh%02dm", 
-		     tm->tm_yday, tm->tm_hour, tm->tm_min);
-	  else
-	    vty_out (vty, "%02dw%dd%02dh", 
-		     tm->tm_yday/7,
-		     tm->tm_yday - ((tm->tm_yday/7) * 7), tm->tm_hour);
-	  vty_out (vty, " ago%s", VTY_NEWLINE);
-	}
-
-      for (nexthop = rib->nexthop; nexthop; nexthop = nexthop->next)
-	{
-	  vty_out (vty, "  %c",
-		   CHECK_FLAG (nexthop->flags, NEXTHOP_FLAG_FIB) ? '*' : ' ');
-
-	  switch (nexthop->type)
-	    {
-	    case NEXTHOP_TYPE_IPV6:
-	    case NEXTHOP_TYPE_IPV6_IFINDEX:
-	    case NEXTHOP_TYPE_IPV6_IFNAME:
-	      vty_out (vty, " %s",
-		       inet_ntop (AF_INET6, &nexthop->gate.ipv6, buf, BUFSIZ));
-	      if (nexthop->type == NEXTHOP_TYPE_IPV6_IFNAME)
-		vty_out (vty, ", %s", nexthop->ifname);
-	      else if (nexthop->ifindex)
-		vty_out (vty, ", via %s", ifindex2ifname (nexthop->ifindex));
-	      break;
-	    case NEXTHOP_TYPE_IFINDEX:
-	      vty_out (vty, " directly connected, %s",
-		       ifindex2ifname (nexthop->ifindex));
-	      break;
-	    case NEXTHOP_TYPE_IFNAME:
-	      vty_out (vty, " directly connected, %s",
-		       nexthop->ifname);
-	      break;
-	    default:
-	      break;
-	    }
-	  if (! CHECK_FLAG (nexthop->flags, NEXTHOP_FLAG_ACTIVE))
-	    vty_out (vty, " inactive");
-
-	  if (CHECK_FLAG (nexthop->flags, NEXTHOP_FLAG_RECURSIVE))
-	    {
-	      vty_out (vty, " (recursive");
-		
-	      switch (nexthop->rtype)
-		{
-		case NEXTHOP_TYPE_IPV6:
-		case NEXTHOP_TYPE_IPV6_IFINDEX:
-		case NEXTHOP_TYPE_IPV6_IFNAME:
-		  vty_out (vty, " via %s)",
-			   inet_ntop (AF_INET6, &nexthop->rgate.ipv6,
-				      buf, BUFSIZ));
-		  if (nexthop->rifindex)
-		    vty_out (vty, ", %s", ifindex2ifname (nexthop->rifindex));
-		  break;
-		case NEXTHOP_TYPE_IFINDEX:
-		case NEXTHOP_TYPE_IFNAME:
-		  vty_out (vty, " is directly connected, %s)",
-			   ifindex2ifname (nexthop->rifindex));
-		  break;
-		default:
-		  break;
-		}
-	    }
-	  vty_out (vty, "%s", VTY_NEWLINE);
-	}
-      vty_out (vty, "%s", VTY_NEWLINE);
-    }
-}
-
-static void
-vty_show_ipv6_route (struct vty *vty, struct route_node *rn,
-		     struct rib *rib)
-{
-  struct nexthop *nexthop;
-  int len = 0;
-  char buf[BUFSIZ];
-
-  /* Nexthop information. */
-  for (nexthop = rib->nexthop; nexthop; nexthop = nexthop->next)
-    {
-      if (nexthop == rib->nexthop)
-	{
-	  /* Prefix information. */
-	  len = vty_out (vty, "%c%c%c %s/%d",
-			 zebra_route_char (rib->type),
-			 CHECK_FLAG (rib->flags, ZEBRA_FLAG_SELECTED)
-			 ? '>' : ' ',
-			 CHECK_FLAG (nexthop->flags, NEXTHOP_FLAG_FIB)
-			 ? '*' : ' ',
-			 inet_ntop (AF_INET6, &rn->p.u.prefix6, buf, BUFSIZ),
-			 rn->p.prefixlen);
-
-	  /* Distance and metric display. */
-	  if (rib->type != ZEBRA_ROUTE_CONNECT 
-	      && rib->type != ZEBRA_ROUTE_KERNEL)
-	    len += vty_out (vty, " [%d/%d]", rib->distance,
-			    rib->metric);
-	}
-      else
-	vty_out (vty, "  %c%*c",
-		 CHECK_FLAG (nexthop->flags, NEXTHOP_FLAG_FIB)
-		 ? '*' : ' ',
-		 len - 3, ' ');
-
-      switch (nexthop->type)
-	{
-	case NEXTHOP_TYPE_IPV6:
-	case NEXTHOP_TYPE_IPV6_IFINDEX:
-	case NEXTHOP_TYPE_IPV6_IFNAME:
-	  vty_out (vty, " via %s",
-		   inet_ntop (AF_INET6, &nexthop->gate.ipv6, buf, BUFSIZ));
-	  if (nexthop->type == NEXTHOP_TYPE_IPV6_IFNAME)
-	    vty_out (vty, ", %s", nexthop->ifname);
-	  else if (nexthop->ifindex)
-	    vty_out (vty, ", %s", ifindex2ifname (nexthop->ifindex));
-	  break;
-	case NEXTHOP_TYPE_IFINDEX:
-	  vty_out (vty, " is directly connected, %s",
-		   ifindex2ifname (nexthop->ifindex));
-	  break;
-	case NEXTHOP_TYPE_IFNAME:
-	  vty_out (vty, " is directly connected, %s",
-		   nexthop->ifname);
-	  break;
-	default:
-	  break;
-	}
-      if (! CHECK_FLAG (nexthop->flags, NEXTHOP_FLAG_ACTIVE))
-	vty_out (vty, " inactive");
-
-      if (CHECK_FLAG (nexthop->flags, NEXTHOP_FLAG_RECURSIVE))
-	{
-	  vty_out (vty, " (recursive");
-		
-	  switch (nexthop->rtype)
-	    {
-	    case NEXTHOP_TYPE_IPV6:
-	    case NEXTHOP_TYPE_IPV6_IFINDEX:
-	    case NEXTHOP_TYPE_IPV6_IFNAME:
-	      vty_out (vty, " via %s)",
-		       inet_ntop (AF_INET6, &nexthop->rgate.ipv6,
-				  buf, BUFSIZ));
-	      if (nexthop->rifindex)
-		vty_out (vty, ", %s", ifindex2ifname (nexthop->rifindex));
-	      break;
-	    case NEXTHOP_TYPE_IFINDEX:
-	    case NEXTHOP_TYPE_IFNAME:
-	      vty_out (vty, " is directly connected, %s)",
-		       ifindex2ifname (nexthop->rifindex));
-	      break;
-	    default:
-	      break;
-	    }
-	}
-
-      if (CHECK_FLAG (rib->flags, ZEBRA_FLAG_BLACKHOLE))
-       vty_out (vty, ", bh");
-      if (CHECK_FLAG (rib->flags, ZEBRA_FLAG_REJECT))
-       vty_out (vty, ", rej");
-      
-      if (rib->type == ZEBRA_ROUTE_RIPNG
-	  || rib->type == ZEBRA_ROUTE_OSPF6
-	  || rib->type == ZEBRA_ROUTE_ISIS
-	  || rib->type == ZEBRA_ROUTE_BGP)
-	{
-	  time_t uptime;
-	  struct tm *tm;
-
-	  uptime = time (NULL);
-	  uptime -= rib->uptime;
-	  tm = gmtime (&uptime);
-
-#define ONE_DAY_SECOND 60*60*24
-#define ONE_WEEK_SECOND 60*60*24*7
-
-	  if (uptime < ONE_DAY_SECOND)
-	    vty_out (vty,  ", %02d:%02d:%02d", 
-		     tm->tm_hour, tm->tm_min, tm->tm_sec);
-	  else if (uptime < ONE_WEEK_SECOND)
-	    vty_out (vty, ", %dd%02dh%02dm", 
-		     tm->tm_yday, tm->tm_hour, tm->tm_min);
-	  else
-	    vty_out (vty, ", %02dw%dd%02dh", 
-		     tm->tm_yday/7,
-		     tm->tm_yday - ((tm->tm_yday/7) * 7), tm->tm_hour);
-	}
-      vty_out (vty, "%s", VTY_NEWLINE);
-    }
-}
-
 #define SHOW_ROUTE_V6_HEADER "Codes: K - kernel route, C - connected, S - static, R - RIPng, O - OSPFv3,%s       I - ISIS, B - BGP, * - FIB route.%s%s"
 
 DEFUN (show_ipv6_route,
@@ -1793,7 +1481,7 @@ DEFUN (show_ipv6_route,
 	    vty_out (vty, SHOW_ROUTE_V6_HEADER, VTY_NEWLINE, VTY_NEWLINE, VTY_NEWLINE);
 	    first = 0;
 	  }
-	vty_show_ipv6_route (vty, rn, rib);
+	vty_show_ip_route (vty, rn, rib);
       }
   return CMD_SUCCESS;
 }
@@ -1835,7 +1523,7 @@ DEFUN (show_ipv6_route_prefix_longer,
 	      vty_out (vty, SHOW_ROUTE_V6_HEADER, VTY_NEWLINE, VTY_NEWLINE, VTY_NEWLINE);
 	      first = 0;
 	    }
-	  vty_show_ipv6_route (vty, rn, rib);
+	  vty_show_ip_route (vty, rn, rib);
 	}
   return CMD_SUCCESS;
 }
@@ -1894,7 +1582,7 @@ DEFUN (show_ipv6_route_protocol,
 	      vty_out (vty, SHOW_ROUTE_V6_HEADER, VTY_NEWLINE, VTY_NEWLINE, VTY_NEWLINE);
 	      first = 0;
 	    }
-	  vty_show_ipv6_route (vty, rn, rib);
+	  vty_show_ip_route (vty, rn, rib);
 	}
   return CMD_SUCCESS;
 }
@@ -1930,7 +1618,7 @@ DEFUN (show_ipv6_route_addr,
       return CMD_WARNING;
     }
 
-  vty_show_ipv6_route_detail (vty, rn);
+  vty_show_ip_route_detail (vty, rn);
 
   route_unlock_node (rn);
 
@@ -1968,7 +1656,7 @@ DEFUN (show_ipv6_route_prefix,
       return CMD_WARNING;
     }
 
-  vty_show_ipv6_route_detail (vty, rn);
+  vty_show_ip_route_detail (vty, rn);
 
   route_unlock_node (rn);
 
@@ -1994,59 +1682,6 @@ DEFUN (show_ipv6_route_summary,
 
   return CMD_SUCCESS;
 }
-
-/* Write IPv6 static route configuration. */
-static int
-static_config_ipv6 (struct vty *vty)
-{
-  struct route_node *rn;
-  struct static_ipv6 *si;  
-  int write;
-  char buf[BUFSIZ];
-  struct route_table *stable;
-
-  write = 0;
-
-  /* Lookup table.  */
-  stable = vrf_static_table (AFI_IP6, SAFI_UNICAST, 0);
-  if (! stable)
-    return -1;
-
-  for (rn = route_top (stable); rn; rn = route_next (rn))
-    for (si = rn->info; si; si = si->next)
-      {
-	vty_out (vty, "ipv6 route %s/%d",
-		 inet_ntop (AF_INET6, &rn->p.u.prefix6, buf, BUFSIZ),
-		 rn->p.prefixlen);
-
-	switch (si->type)
-	  {
-	  case STATIC_IPV6_GATEWAY:
-	    vty_out (vty, " %s", inet_ntop (AF_INET6, &si->ipv6, buf, BUFSIZ));
-	    break;
-	  case STATIC_IPV6_IFNAME:
-	    vty_out (vty, " %s", si->ifname);
-	    break;
-	  case STATIC_IPV6_GATEWAY_IFNAME:
-	    vty_out (vty, " %s %s",
-		     inet_ntop (AF_INET6, &si->ipv6, buf, BUFSIZ), si->ifname);
-	    break;
-	  }
-
-       if (CHECK_FLAG(si->flags, ZEBRA_FLAG_REJECT))
-               vty_out (vty, " %s", "reject");
-
-       if (CHECK_FLAG(si->flags, ZEBRA_FLAG_BLACKHOLE))
-               vty_out (vty, " %s", "blackhole");
-
-	if (si->distance != ZEBRA_STATIC_DISTANCE_DEFAULT)
-	  vty_out (vty, " %d", si->distance);
-	vty_out (vty, "%s", VTY_NEWLINE);
-
-	write = 1;
-      }
-  return write;
-}
 #endif /* HAVE_IPV6 */
 
 /* Static ip route configuration write function. */
@@ -2055,9 +1690,9 @@ zebra_ip_config (struct vty *vty)
 {
   int write = 0;
 
-  write += static_config_ipv4 (vty);
+  write += static_config (vty, AFI_IP);
 #ifdef HAVE_IPV6
-  write += static_config_ipv6 (vty);
+  write += static_config (vty, AFI_IP6);
 #endif /* HAVE_IPV6 */
 
   return write;

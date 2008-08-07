@@ -162,6 +162,7 @@ extern int stream_putq_at (struct stream *, size_t, uint64_t);
 extern int stream_put_ipv4 (struct stream *, u_int32_t);
 extern int stream_put_in_addr (struct stream *, struct in_addr *);
 extern int stream_put_prefix (struct stream *, struct prefix *);
+extern int stream_put_prefix_addr (struct stream *, struct prefix *);
 
 extern void stream_get (void *, struct stream *, size_t);
 extern u_char stream_getc (struct stream *);

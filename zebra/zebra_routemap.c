@@ -414,35 +414,27 @@ route_match_ip_next_hop (void *rule, struct prefix *prefix,
 {
   struct access_list *alist;
   struct nexthop *nexthop;
-  struct prefix_ipv4 p;
 
   if (type == RMAP_ZEBRA)
     {
+      struct prefix *p;
+      
       nexthop = object;
-      switch (nexthop->type) {
-      case NEXTHOP_TYPE_IFINDEX:
-      case NEXTHOP_TYPE_IFNAME:
-      case NEXTHOP_TYPE_IPV4_IFINDEX:
-      case NEXTHOP_TYPE_IPV4_IFNAME:
-        if (nexthop->rtype != NEXTHOP_TYPE_IPV4)
-		return RMAP_NOMATCH;
-        p.family = AF_INET;
-        p.prefix = nexthop->rgate.ipv4;
-        p.prefixlen = IPV4_MAX_BITLEN;
-        break;
-      case NEXTHOP_TYPE_IPV4:
-        p.family = AF_INET;
-        p.prefix = nexthop->gate.ipv4;
-        p.prefixlen = IPV4_MAX_BITLEN;
-        break;
-      default:
+      if (nexthop->rgate)
+        p = nexthop->rgate;
+      else if (nexthop->gate)
+        p = nexthop->gate;
+      else
         return RMAP_NOMATCH;
-      }
+      
+      if (p->family != AF_INET)
+        return RMAP_NOMATCH;
+      
       alist = access_list_lookup (AFI_IP, (char *) rule);
       if (alist == NULL)
 	return RMAP_NOMATCH;
 
-      return (access_list_apply (alist, &p) == FILTER_DENY ?
+      return (access_list_apply (alist, p) == FILTER_DENY ?
 	      RMAP_NOMATCH : RMAP_MATCH);
     }
   return RMAP_NOMATCH;
@@ -480,30 +472,22 @@ route_match_ip_next_hop_prefix_list (void *rule, struct prefix *prefix,
 {
   struct prefix_list *plist;
   struct nexthop *nexthop;
-  struct prefix_ipv4 p;
+  struct prefix *p;
 
   if (type == RMAP_ZEBRA)
     {
       nexthop = object;
-      switch (nexthop->type) {
-      case NEXTHOP_TYPE_IFINDEX:
-      case NEXTHOP_TYPE_IFNAME:
-      case NEXTHOP_TYPE_IPV4_IFINDEX:
-      case NEXTHOP_TYPE_IPV4_IFNAME:
-        if (nexthop->rtype != NEXTHOP_TYPE_IPV4)
-		return RMAP_NOMATCH;
-        p.family = AF_INET;
-        p.prefix = nexthop->rgate.ipv4;
-        p.prefixlen = IPV4_MAX_BITLEN;
-        break;
-      case NEXTHOP_TYPE_IPV4:
-        p.family = AF_INET;
-        p.prefix = nexthop->gate.ipv4;
-        p.prefixlen = IPV4_MAX_BITLEN;
-        break;
-      default:
+      
+      if (nexthop->rgate)
+        p = nexthop->rgate;
+      else if (nexthop->gate)
+        p = nexthop->gate;
+      else
         return RMAP_NOMATCH;
-      }
+      
+      if (p->family != AF_INET)
+        return RMAP_NOMATCH;
+      
       plist = prefix_list_lookup (AFI_IP, (char *) rule);
       if (plist == NULL)
         return RMAP_NOMATCH;
@@ -633,7 +617,7 @@ route_set_src (void *rule, struct prefix *prefix,
       struct nexthop *nexthop;
 
       nexthop = object;
-      nexthop->src = *(union g_addr *)rule;
+      *nexthop->src = *(struct prefix *)rule;
     }
   return RMAP_OKAY;
 }
@@ -642,19 +626,24 @@ route_set_src (void *rule, struct prefix *prefix,
 static void *
 route_set_src_compile (const char *arg)
 {
-  sa_family_t family;
-  union g_addr src, *psrc;
+  struct prefix src, *psrc;
 
-  if (inet_pton(AF_INET, arg, &src.ipv4) > 0)
-    family = AF_INET;
+  if (inet_pton(AF_INET, arg, &src.u.prefix) > 0)
+    {
+      src.family = AF_INET;
+      src.prefixlen = IPV4_MAX_PREFIXLEN;
+    }
 #ifdef HAVE_IPV6
-  else if (inet_pton(AF_INET6, arg, &src.ipv6) > 0)
-    family = AF_INET6;
+  else if (inet_pton(AF_INET6, arg, &src.u.prefix) > 0)
+    {
+      src.family = AF_INET6;
+      src.prefixlen = IPV6_MAX_PREFIXLEN;
+    }
 #endif /* HAVE_IPV6 */
   else
    return NULL;
 
-  psrc = XMALLOC (MTYPE_ROUTE_MAP_COMPILED, sizeof (union g_addr));
+  psrc = XMALLOC (MTYPE_ROUTE_MAP_COMPILED, sizeof (struct prefix));
   *psrc = src;
 
   return psrc;

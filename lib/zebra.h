@@ -399,29 +399,31 @@ struct in_pktinfo
 #define ZEBRA_PORT			2600
 
 /* Zebra message types. */
-#define ZEBRA_INTERFACE_ADD                1
-#define ZEBRA_INTERFACE_DELETE             2
-#define ZEBRA_INTERFACE_ADDRESS_ADD        3
-#define ZEBRA_INTERFACE_ADDRESS_DELETE     4
-#define ZEBRA_INTERFACE_UP                 5
-#define ZEBRA_INTERFACE_DOWN               6
-#define ZEBRA_IPV4_ROUTE_ADD               7
-#define ZEBRA_IPV4_ROUTE_DELETE            8
-#define ZEBRA_IPV6_ROUTE_ADD               9
-#define ZEBRA_IPV6_ROUTE_DELETE           10
-#define ZEBRA_REDISTRIBUTE_ADD            11
-#define ZEBRA_REDISTRIBUTE_DELETE         12
-#define ZEBRA_REDISTRIBUTE_DEFAULT_ADD    13
-#define ZEBRA_REDISTRIBUTE_DEFAULT_DELETE 14
-#define ZEBRA_IPV4_NEXTHOP_LOOKUP         15
-#define ZEBRA_IPV6_NEXTHOP_LOOKUP         16
-#define ZEBRA_IPV4_IMPORT_LOOKUP          17
-#define ZEBRA_IPV6_IMPORT_LOOKUP          18
-#define ZEBRA_INTERFACE_RENAME            19
-#define ZEBRA_ROUTER_ID_ADD               20
-#define ZEBRA_ROUTER_ID_DELETE            21
-#define ZEBRA_ROUTER_ID_UPDATE            22
-#define ZEBRA_MESSAGE_MAX                 23
+enum zserv_message_types {
+  ZEBRA_INTERFACE_ADD = 1,
+  ZEBRA_INTERFACE_DELETE,
+  ZEBRA_INTERFACE_ADDRESS_ADD,
+  ZEBRA_INTERFACE_ADDRESS_DELETE,
+  ZEBRA_INTERFACE_UP,
+  ZEBRA_INTERFACE_DOWN,
+  ZEBRA_IPV4_ROUTE_ADD,
+  ZEBRA_IPV4_ROUTE_DELETE,
+  ZEBRA_IPV6_ROUTE_ADD,
+  ZEBRA_IPV6_ROUTE_DELETE,
+  ZEBRA_REDISTRIBUTE_ADD,
+  ZEBRA_REDISTRIBUTE_DELETE,
+  ZEBRA_REDISTRIBUTE_DEFAULT_ADD,
+  ZEBRA_REDISTRIBUTE_DEFAULT_DELETE,
+  ZEBRA_IPV4_NEXTHOP_LOOKUP,
+  ZEBRA_IPV6_NEXTHOP_LOOKUP,
+  ZEBRA_IPV4_IMPORT_LOOKUP,
+  ZEBRA_IPV6_IMPORT_LOOKUP,
+  ZEBRA_INTERFACE_RENAME,
+  ZEBRA_ROUTER_ID_ADD,
+  ZEBRA_ROUTER_ID_DELETE,
+  ZEBRA_ROUTER_ID_UPDATE,
+  ZEBRA_MESSAGE_MAX,
+};
 
 /* Marker value used in new Zserv, in the byte location corresponding
  * the command value in the old zserv header. To allow old and new
@@ -482,15 +484,13 @@ extern const char *zserv_command_string (unsigned int command);
 #define ZEBRA_FLAG_REJECT             0x80
 
 /* Zebra nexthop flags. */
-#define ZEBRA_NEXTHOP_IFINDEX            1
-#define ZEBRA_NEXTHOP_IFNAME             2
-#define ZEBRA_NEXTHOP_IPV4               3
-#define ZEBRA_NEXTHOP_IPV4_IFINDEX       4
-#define ZEBRA_NEXTHOP_IPV4_IFNAME        5
-#define ZEBRA_NEXTHOP_IPV6               6
-#define ZEBRA_NEXTHOP_IPV6_IFINDEX       7
-#define ZEBRA_NEXTHOP_IPV6_IFNAME        8
-#define ZEBRA_NEXTHOP_BLACKHOLE          9
+enum zserv_nexthop_flags {
+  ZEBRA_NEXTHOP_IFINDEX	= 1,
+  ZEBRA_NEXTHOP_IFNAME,
+  ZEBRA_NEXTHOP_IPV4,
+  ZEBRA_NEXTHOP_IPV6,
+  ZEBRA_NEXTHOP_BLACKHOLE,
+};
 
 #ifndef INADDR_LOOPBACK
 #define	INADDR_LOOPBACK	0x7f000001	/* Internet address 127.0.0.1.  */

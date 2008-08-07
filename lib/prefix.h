@@ -54,6 +54,8 @@ struct prefix
     u_char val[8];
   } u __attribute__ ((aligned (8)));
 };
+#define PREFIX_IN6_ADDR(P) ((P)->u.prefix6)
+#define PREFIX_IN_ADDR(P) ((P)->u.prefix4)
 
 /* IPv4 prefix structure. */
 struct prefix_ipv4
@@ -116,7 +118,7 @@ struct prefix_rd
 /* Max bit/byte length of IPv6 address. */
 #define IPV6_MAX_BYTELEN    16
 #define IPV6_MAX_BITLEN    128
-#define IPV6_MAX_PREFIXLEN 128
+#define IPV6_MAX_PREFIXLEN IPV6_MAX_BITLEN
 #define IPV6_ADDR_CMP(D,S)   memcmp ((D), (S), IPV6_MAX_BYTELEN)
 #define IPV6_ADDR_SAME(D,S)  (memcmp ((D), (S), IPV6_MAX_BYTELEN) == 0)
 #define IPV6_ADDR_COPY(D,S)  memcpy ((D), (S), IPV6_MAX_BYTELEN)
@@ -126,6 +128,13 @@ struct prefix_rd
 
 /* Prefix's family member. */
 #define PREFIX_FAMILY(p)  ((p)->family)
+
+/* Maximum length for this prefix family */
+#define PREFIX_MAX_PLEN(p) \
+	((p)->family == AF_INET ? IPV4_MAX_BITLEN : IPV6_MAX_BITLEN)
+
+#define PREFIX_ADDR_BYTELEN(p) \
+	((p)->family == AF_INET ? IPV4_MAX_BYTELEN : IPV6_MAX_BYTELEN)
 
 /* Prototypes. */
 extern int afi2family (int);

@@ -611,8 +611,12 @@ int
 prefix2str (const struct prefix *p, char *str, int size)
 {
   char buf[BUFSIZ];
-
-  inet_ntop (p->family, &p->u.prefix, buf, BUFSIZ);
+  
+  if (p)
+    inet_ntop (p->family, &p->u.prefix, buf, BUFSIZ);
+  else
+    strcpy (buf, "<null prefix>");
+  
   snprintf (str, size, "%s/%d", buf, p->prefixlen);
   return 0;
 }
