@@ -639,44 +639,107 @@ netlink_interface_addr (struct sockaddr_nl *snl, struct nlmsghdr *h)
   return 0;
 }
 
-/* Looking up routing table by netlink interface. */
-static int
-netlink_routing_table (struct sockaddr_nl *snl, struct nlmsghdr *h)
+/* Parse and dispatch netlink route message to RIB.
+ *
+ * It's largely up to caller to filter messages for suitability.
+ */
+static void
+netlink_route_rib (struct nlmsghdr *h, struct rtmsg *rtm, size_t len)
 {
-  int len;
-  struct rtmsg *rtm;
+  struct prefix d, *dest = &d;
+  struct prefix g, *gate = NULL;
+  struct prefix s, *src = NULL;
   struct rtattr *tb[RTA_MAX + 1];
-  u_char flags = 0;
-
+  int index = 0;
+  int metric = 0;
   char anyaddr[16] = { 0 };
-
-  int index;
-  int table;
-  int metric;
-
-  void *dest;
-  void *gate;
-  void *src;
-
-  rtm = NLMSG_DATA (h);
-
-  if (h->nlmsg_type != RTM_NEWROUTE)
-    return 0;
-  if (rtm->rtm_type != RTN_UNICAST)
-    return 0;
-
-  table = rtm->rtm_table;
-#if 0                           /* we weed them out later in rib_weed_tables () */
-  if (table != RT_TABLE_MAIN && table != zebrad.rtm_table_default)
-    return 0;
-#endif
-
-  len = h->nlmsg_len - NLMSG_LENGTH (sizeof (struct rtmsg));
-  if (len < 0)
-    return -1;
-
+  u_char flags = 0;
+  
+  index = 0;
+  metric = 0;
+  
   memset (tb, 0, sizeof tb);
   netlink_parse_rtattr (tb, RTA_MAX, RTM_RTA (rtm), len);
+
+  d.family = s.family = g.family = rtm->rtm_family;
+  d.prefixlen = rtm->rtm_dst_len;
+  s.prefixlen = g.prefixlen = PREFIX_MAX_PLEN(&s);
+  
+  if (tb[RTA_OIF])
+    index = *(int *) RTA_DATA (tb[RTA_OIF]);
+
+#define COPY_ADDR(DST, SRC) \
+  memcpy (&(DST)->u.prefix, (SRC), PREFIX_ADDR_BYTELEN (DST))
+  
+  if (tb[RTA_DST])
+    COPY_ADDR(dest, RTA_DATA(tb[RTA_DST]));
+  else
+    COPY_ADDR(dest, anyaddr);
+  
+  if (tb[RTA_PREFSRC])
+    {
+      src = &s;
+      COPY_ADDR(src, RTA_DATA (tb[RTA_PREFSRC]));
+    }
+
+  /* Multipath treatment is needed. */
+  if (tb[RTA_GATEWAY])
+    {
+      gate = &g;
+      COPY_ADDR(gate, RTA_DATA (tb[RTA_GATEWAY]));
+    }
+
+  if (tb[RTA_PRIORITY])
+    metric = *(int *) RTA_DATA(tb[RTA_PRIORITY]);
+
+  /* Route which inserted by Zebra. */
+  if (rtm->rtm_protocol == RTPROT_ZEBRA)
+    flags |= ZEBRA_FLAG_SELFROUTE;
+  
+  switch (rtm->rtm_type)
+    {
+      case RTN_BLACKHOLE:
+        flags |= ZEBRA_FLAG_BLACKHOLE;
+        break;
+      case RTN_PROHIBIT:
+        flags |= ZEBRA_FLAG_REJECT;
+        break;
+    }
+
+  if (IS_ZEBRA_DEBUG_KERNEL)
+    {
+      char buf[INET6_ADDRSTRLEN];
+      
+      prefix2str (dest, buf, sizeof (buf));
+      
+      if (h->nlmsg_type == RTM_NEWROUTE)
+        zlog_debug ("RTM_NEWROUTE %s", buf);
+      else
+        zlog_debug ("RTM_DELROUTE %s", buf);
+    }
+    
+  if (h->nlmsg_type == RTM_NEWROUTE)
+    rib_add (ZEBRA_ROUTE_KERNEL, flags, dest, gate, src, index, rtm->rtm_table,
+             metric, 0);
+  else
+    rib_delete (ZEBRA_ROUTE_KERNEL, 0, dest, gate, index, rtm->rtm_table);
+  
+  return;
+#undef COPY_ADDR
+}
+
+static int
+netlink_acceptable_route_msg (struct nlmsghdr *h, struct rtmsg *rtm)
+{
+  switch (rtm->rtm_type)
+    {
+      case RTN_UNICAST:
+      case RTN_BLACKHOLE:
+      case RTN_PROHIBIT:
+        break;
+      default:
+        return 0;
+    }  
 
   if (rtm->rtm_flags & RTM_F_CLONED)
     return 0;
@@ -686,57 +749,47 @@ netlink_routing_table (struct sockaddr_nl *snl, struct nlmsghdr *h)
     return 0;
 
   if (rtm->rtm_src_len != 0)
+    {
+      zlog_warn ("%s: no src len", __func__);
+      return 0;
+    }
+  
+  if (!(h->nlmsg_type == RTM_NEWROUTE || h->nlmsg_type == RTM_DELROUTE))
+    {
+      /* If this is not route add/delete message print warning. */
+      zlog_warn ("%s: Kernel message: %d\n", __func__, h->nlmsg_type);
+      return 0;
+    }
+  
+  return 1;
+}
+
+/* Looking up routing table by netlink interface. */
+static int
+netlink_routing_table (struct sockaddr_nl *snl, struct nlmsghdr *h)
+{
+  int len;
+  struct rtmsg *rtm;
+
+  rtm = NLMSG_DATA (h);
+  
+  if (h->nlmsg_type != RTM_NEWROUTE)
     return 0;
+  
+#if 0                           /* we weed them out later in rib_weed_tables () */
+  if (rtm->table != RT_TABLE_MAIN && rtm->table != zebrad.rtm_table_default)
+    return 0;
+#endif
 
-  /* Route which inserted by Zebra. */
-  if (rtm->rtm_protocol == RTPROT_ZEBRA)
-    flags |= ZEBRA_FLAG_SELFROUTE;
-
-  index = 0;
-  metric = 0;
-  dest = NULL;
-  gate = NULL;
-  src = NULL;
-
-  if (tb[RTA_OIF])
-    index = *(int *) RTA_DATA (tb[RTA_OIF]);
-
-  if (tb[RTA_DST])
-    dest = RTA_DATA (tb[RTA_DST]);
-  else
-    dest = anyaddr;
-
-  if (tb[RTA_PREFSRC])
-    src = RTA_DATA (tb[RTA_PREFSRC]);
-
-  /* Multipath treatment is needed. */
-  if (tb[RTA_GATEWAY])
-    gate = RTA_DATA (tb[RTA_GATEWAY]);
-
-  if (tb[RTA_PRIORITY])
-    metric = *(int *) RTA_DATA(tb[RTA_PRIORITY]);
-
-  if (rtm->rtm_family == AF_INET)
-    {
-      struct prefix p;
-      p.family = AF_INET;
-      memcpy (&p.u.prefix, dest, IPV4_MAX_BYTELEN);
-      p.prefixlen = rtm->rtm_dst_len;
-
-      rib_add (ZEBRA_ROUTE_KERNEL, flags, &p, gate, src, index, table, metric, 0);
-    }
-#ifdef HAVE_IPV6
-  if (rtm->rtm_family == AF_INET6)
-    {
-      struct prefix p;
-      p.family = AF_INET6;
-      memcpy (&p.u.prefix, dest, IPV6_MAX_BYTELEN);
-      p.prefixlen = rtm->rtm_dst_len;
-
-      rib_add (ZEBRA_ROUTE_KERNEL, flags, &p, gate, NULL, index, table, metric, 0);
-    }
-#endif /* HAVE_IPV6 */
-
+  len = h->nlmsg_len - NLMSG_LENGTH (sizeof (struct rtmsg));
+  if (len < 0)
+    return -1;
+    
+  if (!netlink_acceptable_route_msg (h, rtm))
+    return 0;
+  
+  netlink_route_rib (h, rtm, len);
+  
   return 0;
 }
 
@@ -761,25 +814,9 @@ netlink_route_change (struct sockaddr_nl *snl, struct nlmsghdr *h)
 {
   int len;
   struct rtmsg *rtm;
-  struct rtattr *tb[RTA_MAX + 1];
-
-  char anyaddr[16] = { 0 };
-
-  int index;
-  int table;
-  void *dest;
-  void *gate;
-  void *src;
 
   rtm = NLMSG_DATA (h);
-
-  if (!(h->nlmsg_type == RTM_NEWROUTE || h->nlmsg_type == RTM_DELROUTE))
-    {
-      /* If this is not route add/delete message print warning. */
-      zlog_warn ("Kernel message: %d\n", h->nlmsg_type);
-      return 0;
-    }
-
+  
   /* Connected route. */
   if (IS_ZEBRA_DEBUG_KERNEL)
     zlog_debug ("%s %s %s proto %s",
@@ -789,13 +826,8 @@ netlink_route_change (struct sockaddr_nl *snl, struct nlmsghdr *h)
                rtm->rtm_type == RTN_UNICAST ? "unicast" : "multicast",
                lookup (rtproto_str, rtm->rtm_protocol));
 
-  if (rtm->rtm_type != RTN_UNICAST)
-    {
-      return 0;
-    }
-
-  table = rtm->rtm_table;
-  if (table != RT_TABLE_MAIN && table != zebrad.rtm_table_default)
+  if (rtm->rtm_table != RT_TABLE_MAIN
+      && rtm->rtm_table != zebrad.rtm_table_default)
     {
       return 0;
     }
@@ -804,69 +836,14 @@ netlink_route_change (struct sockaddr_nl *snl, struct nlmsghdr *h)
   if (len < 0)
     return -1;
 
-  memset (tb, 0, sizeof tb);
-  netlink_parse_rtattr (tb, RTA_MAX, RTM_RTA (rtm), len);
-
-  if (rtm->rtm_flags & RTM_F_CLONED)
-    return 0;
-  if (rtm->rtm_protocol == RTPROT_REDIRECT)
-    return 0;
-  if (rtm->rtm_protocol == RTPROT_KERNEL)
-    return 0;
-
   if (rtm->rtm_protocol == RTPROT_ZEBRA && h->nlmsg_type == RTM_NEWROUTE)
     return 0;
 
-  if (rtm->rtm_src_len != 0)
-    {
-      zlog_warn ("netlink_route_change(): no src len");
-      return 0;
-    }
-
-  index = 0;
-  dest = NULL;
-  gate = NULL;
-  src = NULL;
-
-  if (tb[RTA_OIF])
-    index = *(int *) RTA_DATA (tb[RTA_OIF]);
-
-  if (tb[RTA_DST])
-    dest = RTA_DATA (tb[RTA_DST]);
-  else
-    dest = anyaddr;
-
-  if (tb[RTA_GATEWAY])
-    gate = RTA_DATA (tb[RTA_GATEWAY]);
-
-  if (tb[RTA_PREFSRC])
-    src = RTA_DATA (tb[RTA_PREFSRC]);
-
-  struct prefix p;
+  if (!netlink_acceptable_route_msg (h, rtm))
+    return 0;
   
-  p.family = rtm->rtm_family;
-  p.prefixlen = rtm->rtm_dst_len;
-  memcpy (&p.u.prefix, dest, 
-          p.family == AF_INET ? IPV4_MAX_BYTELEN : IPV6_MAX_BYTELEN);
-  p.prefixlen = rtm->rtm_dst_len;
-
-  if (IS_ZEBRA_DEBUG_KERNEL)
-    {
-      char buf[INET6_ADDRSTRLEN];
-      
-      prefix2str (&p, buf, sizeof (buf));
-      
-      if (h->nlmsg_type == RTM_NEWROUTE)
-        zlog_debug ("RTM_NEWROUTE %s", buf);
-      else
-        zlog_debug ("RTM_DELROUTE %s", buf);
-    }
-
-  if (h->nlmsg_type == RTM_NEWROUTE)
-    rib_add (ZEBRA_ROUTE_KERNEL, 0, &p, gate, src, index, table, 0, 0);
-  else
-    rib_delete (ZEBRA_ROUTE_KERNEL, 0, &p, gate, index, table);
-
+  netlink_route_rib (h, rtm, len);
+  
   return 0;
 }
 
