@@ -558,7 +558,6 @@ nexthop_active_check (struct route_node *rn, struct rib *rib,
  *
  * Return value is the new number of active nexthops.
  */
-
 static int
 nexthop_active_update (struct route_node *rn, struct rib *rib, int set)
 {
@@ -578,11 +577,11 @@ nexthop_active_update (struct route_node *rn, struct rib *rib, int set)
 	prev_index != nexthop->ifindex)
       SET_FLAG (rib->flags, ZEBRA_FLAG_CHANGED);
   }
+  
   return rib->nexthop_active_num;
 }
 
 
-
 static void
 rib_install_kernel (struct route_node *rn, struct rib *rib)
 {
@@ -775,6 +774,8 @@ rib_process (struct route_node *rn)
           if (! RIB_SYSTEM_ROUTE (select))
             rib_install_kernel (rn, select);
           redistribute_add (&rn->p, select);
+          
+          select->uptime = quagga_time (NULL);
         }
       else if (! RIB_SYSTEM_ROUTE (select))
         {
@@ -813,10 +814,12 @@ rib_process (struct route_node *rn)
 
       /* Set real nexthop. */
       nexthop_active_update (rn, fib, 1);
+      
+      fib->uptime = quagga_time (NULL);
     }
 
   /* Regardless of some RIB entry being SELECTED or not before, now we can
-   * tell, that if a new winner exists, FIB is still not updated with this
+   * tell that, if a new winner exists, FIB is still not updated with this
    * data, but ready to be.
    */
   if (select)
@@ -831,6 +834,8 @@ rib_process (struct route_node *rn)
         rib_install_kernel (rn, select);
       SET_FLAG (select->flags, ZEBRA_FLAG_SELECTED);
       redistribute_add (&rn->p, select);
+      
+      select->uptime = quagga_time (NULL);
     }
 
   /* FIB route was removed, should be deleted */
@@ -1265,7 +1270,7 @@ rib_add (int type, int flags, struct prefix *p,
   rib->metric = metric;
   rib->table = vrf_id;
   rib->nexthop_num = 0;
-  rib->uptime = time (NULL);
+  rib->uptime = quagga_time (NULL);
 
   /* Nexthop settings. */
   rib_nexthop_add (rib, gate, src, ifindex);
@@ -1469,7 +1474,6 @@ rib_add_multipath (struct prefix *p, struct rib *rib)
   return 0;
 }
 
-/* XXX factor with rib_delete_ipv6 */
 int
 rib_delete (int type, int flags, struct prefix *p, struct prefix *gate,
             unsigned int ifindex, u_int32_t vrf_id)
@@ -1742,6 +1746,7 @@ static_install (struct prefix *p, struct static_route *si)
       rib->distance = si->distance;
       rib->metric = 0;
       rib->nexthop_num = 0;
+      rib->uptime = quagga_time (NULL);
       
       static_add_nexthops (rib, si);
       
