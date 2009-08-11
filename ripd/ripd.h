@@ -140,7 +140,7 @@ struct rip
   char *default_information_route_map;
 
   /* RIP default distance. */
-  u_char distance;
+  distance_t distance;
   struct route_table *distance_table;
 
   /* For redistribute route map. */
@@ -185,7 +185,7 @@ union rip_buf
 struct rip_info
 {
   /* This route's type. */
-  int type;
+  zebra_route_t type;
 
   /* Sub type. */
   int sub_type;
@@ -195,7 +195,7 @@ struct rip_info
   struct in_addr from;
 
   /* Which interface does this route come from. */
-  unsigned int ifindex;
+  ifindex_t ifindex;
 
   /* Metric of this route. */
   u_int32_t metric;
@@ -221,11 +221,11 @@ struct rip_info
   u_char metric_set;
   u_int32_t metric_out;
   u_short tag_out;
-  unsigned int ifindex_out;
+  ifindex_t ifindex_out;
 
   struct route_node *rp;
 
-  u_char distance;
+  distance_t distance;
 
 #ifdef NEW_RIP_TABLE
   struct rip_info *next;
@@ -395,12 +395,16 @@ extern int if_check_address (struct in_addr addr);
 extern int rip_request_send (struct sockaddr_in *, struct interface *, u_char,
                       struct connected *);
 extern int rip_neighbor_lookup (struct sockaddr_in *);
-extern void rip_redistribute_add (int, int, struct prefix_ipv4 *, unsigned int, 
-			   struct in_addr *, unsigned int, unsigned char);
-extern void rip_redistribute_delete (int, int, struct prefix_ipv4 *, unsigned int);
+extern void rip_redistribute_add (zebra_route_t, int, struct prefix_ipv4 *, 
+                                  ifindex_t, struct in_addr *, 
+                                  unsigned int, distance_t);
+extern void rip_redistribute_delete (zebra_route_t, int, struct prefix_ipv4 *,
+                                     ifindex_t);
 extern void rip_redistribute_withdraw (int);
-extern void rip_zebra_ipv4_add (struct prefix_ipv4 *, struct in_addr *, u_int32_t, u_char);
-extern void rip_zebra_ipv4_delete (struct prefix_ipv4 *, struct in_addr *, u_int32_t);
+extern void rip_zebra_ipv4_add (struct prefix_ipv4 *, struct in_addr *,
+                                u_int32_t, distance_t);
+extern void rip_zebra_ipv4_delete (struct prefix_ipv4 *, struct in_addr *,
+                                   u_int32_t);
 extern void rip_interface_multicast_set (int, struct connected *);
 extern void rip_distribute_update_interface (struct interface *);
 extern void rip_if_rmap_update_interface (struct interface *);

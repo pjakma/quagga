@@ -25,11 +25,11 @@
 
 #include "prefix.h"
 #include "nexthop.h"
+#include "if.h"
 
 #define DISTANCE_INFINITY  255
 
 /* Routing information base. */
-
 struct rib
 {
   /* Status Flags for the *route_node*, but kept in the head RIB.. */
@@ -50,7 +50,7 @@ struct rib
   time_t uptime;
 
   /* Type fo this route. */
-  int type;
+  zebra_route_t type;
 
   /* Which routing table */
   int table;			
@@ -59,7 +59,7 @@ struct rib
   u_int32_t metric;
 
   /* Distance. */
-  u_char distance;
+  distance_t distance;
 
   /* Flags of this route.
    * This flag's definition is in lib/zebra.h ZEBRA_FLAG_* and is exposed
@@ -102,7 +102,7 @@ struct static_route
   /* May set ZEBRA_FLAG_BLACKHOLE, may additionally set ZEBRA_FLAG_REJECT */
 
   /* Administrative distance. */
-  u_char distance;
+  distance_t distance;
 
   struct prefix *gate;
   char *ifname; 
@@ -140,7 +140,7 @@ struct vrf
 
 extern void rib_nexthop_blackhole_add (struct rib *);
 extern void rib_nexthop_add (struct rib *, struct prefix *,
-			     struct prefix *, unsigned int ifindex);
+			     struct prefix *, ifindex_t ifindex);
 extern void rib_lookup_and_dump (struct prefix *);
 extern void rib_dump (const char *, const struct prefix *, const struct rib *);
 extern int rib_lookup_route (struct prefix *, struct prefix *);
@@ -157,16 +157,16 @@ extern struct route_table *vrf_static_table (afi_t afi, safi_t safi, u_int32_t i
 /* NOTE:
  * All rib_add functions will not just add prefix into RIB, but
  * also implicitly withdraw equal prefix of same type. */
-extern int rib_add (int type, int flags, struct prefix *p, 
-			 struct prefix *gate, struct prefix *src,
-			 unsigned int ifindex, u_int32_t vrf_id,
-			 u_int32_t, u_char);
+extern int rib_add (zebra_route_t type, int flags, struct prefix *p, 
+                    struct prefix *gate, struct prefix *src,
+                    ifindex_t ifindex, u_int32_t vrf_id,
+                    u_int32_t, distance_t);
 
 extern int rib_add_multipath (struct prefix *, struct rib *);
 
-extern int rib_delete (int type, int flags, struct prefix *p,
-		            struct prefix *gate, unsigned int ifindex, 
-		            u_int32_t);
+extern int rib_delete (zebra_route_t type, int flags, struct prefix *p,
+                       struct prefix *gate, ifindex_t ifindex, 
+                       u_int32_t);
 
 extern struct rib *rib_match (struct prefix *);
 extern struct rib *rib_lookup (struct prefix *);
@@ -178,11 +178,11 @@ extern void rib_close (void);
 extern void rib_init (void);
 
 extern int static_add (struct prefix *p, struct prefix *gate,
-                       const char *ifname, u_char flags, u_char distance,
+                       const char *ifname, u_char flags, distance_t distance,
                        u_int32_t vrf_id);
 
 extern int static_delete (struct prefix *p, struct prefix *gate, 
-                          const char *ifname, u_char distance,
+                          const char *ifname, distance_t distance,
                           u_int32_t vrf_id);
 
 #endif /*_ZEBRA_RIB_H */

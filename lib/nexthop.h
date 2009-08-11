@@ -44,11 +44,11 @@ struct nexthop
   struct prefix *src;
   
   /* Interface index. */
-  unsigned int ifindex;
+  ifindex_t ifindex;
   
   /* Recursive lookup nexthop. */
   u_char rtype;
-  unsigned int rifindex;
+  ifindex_t rifindex;
   struct prefix *rgate;
 };
 

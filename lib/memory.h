@@ -64,7 +64,7 @@ extern struct mlist mlists[];
 extern void *zmalloc (int type, size_t size);
 extern void *zcalloc (int type, size_t size);
 extern void *zrealloc (int type, void *ptr, size_t size);
-extern void  zfree (int type, void *ptr);
+extern void zfree (int type, void *ptr);
 extern char *zstrdup (int type, const char *str);
 
 extern void *mtype_zmalloc (const char *file, int line, int type, size_t size);

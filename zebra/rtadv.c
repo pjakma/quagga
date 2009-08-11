@@ -404,7 +404,7 @@ rtadv_process_advert (void)
 }
 
 static void
-rtadv_process_packet (u_char *buf, unsigned int len, unsigned int ifindex, int hoplimit)
+rtadv_process_packet (u_char *buf, unsigned int len, ifindex_t ifindex, int hoplimit)
 {
   struct icmp6_hdr *icmph;
   struct interface *ifp;
@@ -467,7 +467,7 @@ rtadv_read (struct thread *thread)
   int len;
   u_char buf[RTADV_MSG_SIZE];
   struct sockaddr_in6 from;
-  unsigned int ifindex;
+  ifindex_t ifindex;
   int hoplimit = -1;
 
   sock = THREAD_FD (thread);

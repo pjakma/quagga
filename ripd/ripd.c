@@ -1513,9 +1513,9 @@ rip_send_packet (u_char * buf, int size, struct sockaddr_in *to,
 
 /* Add redistributed route to RIP table. */
 void
-rip_redistribute_add (int type, int sub_type, struct prefix_ipv4 *p, 
-		      unsigned int ifindex, struct in_addr *nexthop,
-                      unsigned int metric, unsigned char distance)
+rip_redistribute_add (zebra_route_t type, int sub_type, struct prefix_ipv4 *p, 
+		      ifindex_t ifindex, struct in_addr *nexthop,
+                      unsigned int metric, distance_t distance)
 {
   int ret;
   struct route_node *rp;
@@ -1600,8 +1600,8 @@ rip_redistribute_add (int type, int sub_type, struct prefix_ipv4 *p,
 
 /* Delete redistributed route from RIP table. */
 void
-rip_redistribute_delete (int type, int sub_type, struct prefix_ipv4 *p, 
-			   unsigned int ifindex)
+rip_redistribute_delete (zebra_route_t type, int sub_type,
+                         struct prefix_ipv4 *p, ifindex_t ifindex)
 {
   int ret;
   struct route_node *rp;
@@ -1788,7 +1788,7 @@ rip_read_new (struct thread *t)
   int sock;
   char buf[RIP_PACKET_MAXSIZ];
   struct sockaddr_in from;
-  unsigned int ifindex;
+  ifindex_t ifindex;
   
   /* Fetch socket then register myself. */
   sock = THREAD_FD (t);
@@ -3106,7 +3106,7 @@ struct route_table *rip_distance_table;
 struct rip_distance
 {
   /* Distance value for the IP source prefix. */
-  u_char distance;
+  distance_t distance;
 
   /* Name of the access-list to be matched. */
   char *access_list;
@@ -3130,7 +3130,7 @@ rip_distance_set (struct vty *vty, const char *distance_str, const char *ip_str,
 {
   int ret;
   struct prefix_ipv4 p;
-  u_char distance;
+  distance_t distance;
   struct route_node *rn;
   struct rip_distance *rdistance;
 
@@ -3177,7 +3177,7 @@ rip_distance_unset (struct vty *vty, const char *distance_str,
 {
   int ret;
   struct prefix_ipv4 p;
-  u_char distance;
+  distance_t distance;
   struct route_node *rn;
   struct rip_distance *rdistance;
 

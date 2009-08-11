@@ -68,6 +68,8 @@ struct if_stats
 };
 #endif /* HAVE_PROC_NET_DEV */
 
+typedef unsigned int ifindex_t;
+
 /* Interface structure */
 struct interface 
 {
@@ -82,7 +84,7 @@ struct interface
 
   /* Interface index (should be IFINDEX_INTERNAL for non-kernel or
      deleted interfaces). */
-  unsigned int ifindex;
+  ifindex_t ifindex;
 #define IFINDEX_INTERNAL	0
 
   /* Zebra internal interface status */
@@ -231,7 +233,7 @@ struct connected
 /* Prototypes. */
 extern int if_cmp_func (struct interface *, struct interface *);
 extern struct interface *if_create (const char *name, int namelen);
-extern struct interface *if_lookup_by_index (unsigned int);
+extern struct interface *if_lookup_by_index (ifindex_t);
 extern struct interface *if_lookup_exact_address (struct in_addr);
 extern struct interface *if_lookup_address (struct in_addr);
 
@@ -272,7 +274,7 @@ extern const char *if_flag_dump(unsigned long);
 /* Please use ifindex2ifname instead of if_indextoname where possible;
    ifindex2ifname uses internal interface info, whereas if_indextoname must
    make a system call. */
-extern const char *ifindex2ifname (unsigned int);
+extern const char *ifindex2ifname (ifindex_t);
 
 /* Please use ifname2ifindex instead of if_nametoindex where possible;
    ifname2ifindex uses internal interface info, whereas if_nametoindex must
@@ -295,7 +297,7 @@ extern struct connected  *connected_lookup_address (struct interface *,
 extern unsigned int if_nametoindex (const char *);
 #endif
 #ifndef HAVE_IF_INDEXTONAME
-extern char *if_indextoname (unsigned int, char *);
+extern char *if_indextoname (ifindex_t, char *);
 #endif
 
 /* Exported variables. */

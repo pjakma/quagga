@@ -616,7 +616,7 @@ zread_ipv4_add (struct zserv *client, u_short length)
   u_char nexthop_num;
   u_char nexthop_type;
   struct stream *s;
-  unsigned int ifindex;
+  ifindex_t ifindex;
   u_char ifname_len;
 
   /* Get input stream.  */

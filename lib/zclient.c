@@ -731,7 +731,7 @@ memconstant(const void *s, int c, size_t n)
 struct connected *
 zebra_interface_address_read (int type, struct stream *s)
 {
-  unsigned int ifindex;
+  ifindex_t ifindex;
   struct interface *ifp;
   struct connected *ifc;
   struct prefix p, d;

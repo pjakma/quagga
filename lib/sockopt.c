@@ -208,7 +208,7 @@ setsockopt_multicast_ipv4(int sock,
 			int optname, 
 			struct in_addr if_addr /* required */,
 			unsigned int mcast_addr,
-			unsigned int ifindex /* optional: if non-zero, may be
+			ifindex_t ifindex /* optional: if non-zero, may be
 						  used instead of if_addr */)
 {
 

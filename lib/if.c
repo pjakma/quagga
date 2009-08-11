@@ -178,7 +178,7 @@ if_add_hook (int type, int (*func)(struct interface *ifp))
 
 /* Interface existance check by index. */
 struct interface *
-if_lookup_by_index (unsigned int index)
+if_lookup_by_index (ifindex_t index)
 {
   struct listnode *node;
   struct interface *ifp;
@@ -192,7 +192,7 @@ if_lookup_by_index (unsigned int index)
 }
 
 const char *
-ifindex2ifname (unsigned int index)
+ifindex2ifname (ifindex_t index)
 {
   struct interface *ifp;
 
@@ -772,7 +772,7 @@ if_nametoindex (const char *name)
 
 #ifndef HAVE_IF_INDEXTONAME
 char *
-if_indextoname (unsigned int ifindex, char *name)
+if_indextoname (ifindex_t ifindex, char *name)
 {
   struct interface *ifp;
 
@@ -837,7 +837,7 @@ ifaddr_ipv4_delete (struct in_addr *ifaddr, struct interface *ifp)
 
 /* Lookup interface by interface's IP address or interface index. */
 static struct interface *
-ifaddr_ipv4_lookup (struct in_addr *addr, unsigned int ifindex)
+ifaddr_ipv4_lookup (struct in_addr *addr, ifindex_t ifindex)
 {
   struct prefix_ipv4 p;
   struct route_node *rn;

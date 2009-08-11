@@ -169,7 +169,7 @@ vrf_static_table (afi_t afi, safi_t safi, u_int32_t id)
 
 void
 rib_nexthop_add (struct rib *rib, struct prefix *gate, 
-             struct prefix *src, unsigned int ifindex)
+             struct prefix *src, ifindex_t ifindex)
 {
   struct nexthop *nh = nexthop_new ();
   
@@ -562,7 +562,8 @@ static int
 nexthop_active_update (struct route_node *rn, struct rib *rib, int set)
 {
   struct nexthop *nexthop;
-  unsigned int prev_active, prev_index, new_active;
+  unsigned int prev_active, new_active;
+  ifindex_t prev_index;
 
   rib->nexthop_active_num = 0;
   UNSET_FLAG (rib->flags, ZEBRA_FLAG_CHANGED);
@@ -1202,10 +1203,10 @@ rib_delnode (struct route_node *rn, struct rib *rib)
 }
 
 int
-rib_add (int type, int flags, struct prefix *p, 
-	      struct prefix *gate, struct prefix *src,
-	      unsigned int ifindex, u_int32_t vrf_id,
-	      u_int32_t metric, u_char distance)
+rib_add (zebra_route_t type, int flags, struct prefix *p, 
+         struct prefix *gate, struct prefix *src,
+         ifindex_t ifindex, u_int32_t vrf_id,
+         u_int32_t metric, distance_t distance)
 {
   struct rib *rib;
   struct rib *same = NULL;
@@ -1475,8 +1476,8 @@ rib_add_multipath (struct prefix *p, struct rib *rib)
 }
 
 int
-rib_delete (int type, int flags, struct prefix *p, struct prefix *gate,
-            unsigned int ifindex, u_int32_t vrf_id)
+rib_delete (zebra_route_t type, int flags, struct prefix *p, 
+            struct prefix *gate, ifindex_t ifindex, u_int32_t vrf_id)
 {
   struct route_table *table;
   struct route_node *rn;
@@ -1819,7 +1820,7 @@ static_uninstall (struct prefix *p, struct static_route *si)
 /* Add static route into static route configuration. */
 int
 static_add (struct prefix *p, struct prefix *gate, 
-            const char *ifname, u_char flags, u_char distance,
+            const char *ifname, u_char flags, distance_t distance,
             u_int32_t vrf_id)
 {
   struct route_node *rn;
@@ -1916,7 +1917,7 @@ static_add (struct prefix *p, struct prefix *gate,
 /* Delete static route from static route configuration. */
 int
 static_delete (struct prefix *p, struct prefix *gate, const char *ifname,
-		    u_char distance, u_int32_t vrf_id)
+                  distance_t distance, u_int32_t vrf_id)
 {
   struct route_node *rn;
   struct static_route *si;

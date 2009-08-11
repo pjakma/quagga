@@ -809,7 +809,7 @@ rtm_read (struct rt_msghdr *rtm)
   if (dest.sa.sa_family == AF_INET)
     {
       struct prefix p;
-      unsigned int ifindex = IFINDEX_INTERNAL;
+      ifindex_t ifindex = IFINDEX_INTERNAL;
       
       p.family = dest.sa.sa_family;
       

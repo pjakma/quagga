@@ -37,7 +37,7 @@ struct zclient *zclient = NULL;
 /* RIPd to zebra command interface. */
 void
 rip_zebra_ipv4_add (struct prefix_ipv4 *p, struct in_addr *nexthop, 
-		    u_int32_t metric, u_char distance)
+		    u_int32_t metric, distance_t distance)
 {
   struct zapi_ipv4 api;
 
@@ -152,7 +152,7 @@ rip_zclient_reset (void)
 
 /* RIP route-map set for redistribution */
 static void
-rip_routemap_set (int type, const char *name)
+rip_routemap_set (zebra_route_t type, const char *name)
 {
   if (rip->route_map[type].name)
     free(rip->route_map[type].name);
@@ -162,14 +162,14 @@ rip_routemap_set (int type, const char *name)
 }
 
 static void
-rip_redistribute_metric_set (int type, unsigned int metric)
+rip_redistribute_metric_set (zebra_route_t type, unsigned int metric)
 {
   rip->route_map[type].metric_config = 1;
   rip->route_map[type].metric = metric;
 }
 
 static int
-rip_metric_unset (int type, unsigned int metric)
+rip_metric_unset (zebra_route_t type, unsigned int metric)
 {
 #define DONT_CARE_METRIC_RIP 17  
   if (metric != DONT_CARE_METRIC_RIP &&
@@ -182,7 +182,7 @@ rip_metric_unset (int type, unsigned int metric)
 
 /* RIP route-map unset for redistribution */
 static int
-rip_routemap_unset (int type, const char *name)
+rip_routemap_unset (zebra_route_t type, const char *name)
 {
   if (! rip->route_map[type].name ||
       (name != NULL && strcmp(rip->route_map[type].name,name)))
@@ -197,7 +197,7 @@ rip_routemap_unset (int type, const char *name)
 
 /* Redistribution types */
 static struct {
-  int type;
+  zebra_route_t type;
   int str_min_len;
   const char *str;
 } redist_type[] = {
@@ -234,7 +234,7 @@ DEFUN (no_router_zebra,
 }
 
 static int
-rip_redistribute_set (int type)
+rip_redistribute_set (zebra_route_t type)
 {
   if (zclient->redist[type])
     return CMD_SUCCESS;
@@ -248,7 +248,7 @@ rip_redistribute_set (int type)
 }
 
 static int
-rip_redistribute_unset (int type)
+rip_redistribute_unset (zebra_route_t type)
 {
   if (! zclient->redist[type])
     return CMD_SUCCESS;
@@ -265,7 +265,7 @@ rip_redistribute_unset (int type)
 }
 
 int
-rip_redistribute_check (int type)
+rip_redistribute_check (zebra_route_t type)
 {
   return (zclient->redist[type]);
 }

@@ -86,7 +86,7 @@ extern int setsockopt_multicast_ipv4(int sock, int optname,
 			             struct in_addr if_addr
 					 /* required: interface to join on */,
                                      unsigned int mcast_addr,
-			             unsigned int ifindex
+			             ifindex_t ifindex
 					 /* optional: if non-zero, may be used
 					 	instead of if_addr */);
 extern int setsockopt_ipv4_tos(int sock, int tos);

@@ -898,7 +898,7 @@ DEFUN (show_ip_route_protocol,
        "Routing Information Protocol (RIP)\n"
        "Static routes\n")
 {
-  int type;
+  zebra_route_t type;
   struct route_table *table;
   struct route_node *rn;
   struct rib *rib;
@@ -1505,7 +1505,7 @@ DEFUN (show_ipv6_route_protocol,
        "Routing Information Protocol (RIPng)\n"
        "Static routes\n")
 {
-  int type;
+  zebra_route_t type;
   struct route_table *table;
   struct route_node *rn;
   struct rib *rib;

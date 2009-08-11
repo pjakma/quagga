@@ -73,7 +73,7 @@ kernel_rtm_ipv4 (int cmd, struct prefix *p, struct rib *rib, int family)
   struct sockaddr_in sin_dest, sin_mask, sin_gate;
   struct nexthop *nexthop;
   int nexthop_num = 0;
-  unsigned int ifindex = 0;
+  ifindex_t ifindex = 0;
   int gate = 0;
   int error;
   char prefix_buf[INET_ADDRSTRLEN];
@@ -356,7 +356,7 @@ kernel_rtm_ipv6_multipath (int cmd, struct prefix *p, struct rib *rib,
   struct sockaddr_in6 sin_dest, sin_mask, sin_gate;
   struct nexthop *nexthop;
   int nexthop_num = 0;
-  unsigned int ifindex = 0;
+  ifindex_t ifindex = 0;
   int gate = 0;
   int error;
 

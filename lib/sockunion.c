@@ -326,7 +326,7 @@ sockunion_log (union sockunion *su)
    1 : connect is in progress */
 enum connect_result
 sockunion_connect (int fd, union sockunion *peersu, unsigned short port,
-		   unsigned int ifindex)
+		   ifindex_t ifindex)
 {
   int ret;
   int val;

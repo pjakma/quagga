@@ -432,27 +432,29 @@ enum zserv_message_types {
 #define ZEBRA_HEADER_MARKER              255
 
 /* Zebra route's types. */
-#define ZEBRA_ROUTE_SYSTEM               0
-#define ZEBRA_ROUTE_KERNEL               1
-#define ZEBRA_ROUTE_CONNECT              2
-#define ZEBRA_ROUTE_STATIC               3
-#define ZEBRA_ROUTE_RIP                  4
-#define ZEBRA_ROUTE_RIPNG                5
-#define ZEBRA_ROUTE_OSPF                 6
-#define ZEBRA_ROUTE_OSPF6                7
-#define ZEBRA_ROUTE_ISIS                 8
-#define ZEBRA_ROUTE_BGP                  9
-#define ZEBRA_ROUTE_HSLS		 10
-#define ZEBRA_ROUTE_MAX                  11
+typedef enum {
+  ZEBRA_ROUTE_SYSTEM	= 0,
+  ZEBRA_ROUTE_KERNEL	= 1,
+  ZEBRA_ROUTE_CONNECT	= 2,
+  ZEBRA_ROUTE_STATIC	= 3,
+  ZEBRA_ROUTE_RIP	= 4,
+  ZEBRA_ROUTE_RIPNG	= 5,
+  ZEBRA_ROUTE_OSPF	= 6,
+  ZEBRA_ROUTE_OSPF6	= 7,
+  ZEBRA_ROUTE_ISIS	= 8,
+  ZEBRA_ROUTE_BGP	= 9,
+  ZEBRA_ROUTE_HSLS	= 10,
+  ZEBRA_ROUTE_MAX	= 11,
+} zebra_route_t;
 
 /* Note: whenever a new route-type or zserv-command is added the
  * corresponding {command,route}_types[] table in lib/log.c MUST be
  * updated! */
 
 /* Map a route type to a string.  For example, ZEBRA_ROUTE_RIPNG -> "ripng". */
-extern const char *zebra_route_string(unsigned int route_type);
+extern const char *zebra_route_string(zebra_route_t route_type);
 /* Map a route type to a char.  For example, ZEBRA_ROUTE_RIPNG -> 'R'. */
-extern char zebra_route_char(unsigned int route_type);
+extern char zebra_route_char(zebra_route_t route_type);
 /* Map a zserv command type to the same string, 
  * e.g. ZEBRA_INTERFACE_ADD -> "ZEBRA_INTERFACE_ADD" */
 /* Map a protocol name to its number. e.g. ZEBRA_ROUTE_BGP->9*/
@@ -537,6 +539,9 @@ typedef u_int8_t safi_t;
 /* Zebra types. Used in Zserv message header. */
 typedef u_int16_t zebra_size_t;
 typedef u_int16_t zebra_command_t;
+
+/* Administrative distance type */
+typedef u_char distance_t;
 
 /* FIFO -- first in first out structure and macros.  */
 struct fifo
