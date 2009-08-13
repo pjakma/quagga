@@ -69,9 +69,8 @@ proc_route_read (void)
   while (fgets (buf, RT_BUFSIZ, fp) != NULL)
     {
       int n;
-      struct prefix_ipv4 p;
+      struct prefix p, gateway;
       struct in_addr tmpmask;
-      struct in_addr gateway;
       u_char zebra_flags = 0;
 
       n = sscanf (buf, "%s %s %s %x %d %d %d %s %d %d %d",
@@ -90,13 +89,14 @@ proc_route_read (void)
       if (flags & RTF_DYNAMIC)
 	zebra_flags |= ZEBRA_FLAG_SELFROUTE;
 
-      p.family = AF_INET;
+      gateway.family = p.family = AF_INET;
       sscanf (dest, "%lX", (unsigned long *)&p.prefix);
       sscanf (mask, "%lX", (unsigned long *)&tmpmask);
       p.prefixlen = ip_masklen (tmpmask);
-      sscanf (gate, "%lX", (unsigned long *)&gateway);
+      gateway.prefixlen = IPV4_MAX_PREFIXLEN;
+      sscanf (&gate.u.prefix, "%lX", (unsigned long *)&gateway);
 
-      rib_add_ipv4 (ZEBRA_ROUTE_KERNEL, zebra_flags, &p, &gateway, NULL, 0, 0, 0, 0);
+      rib_add (ZEBRA_ROUTE_KERNEL, zebra_flags, &p, &gateway, NULL, 0, 0, 0, 0);
     }
 
   fclose (fp);

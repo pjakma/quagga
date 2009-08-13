@@ -69,8 +69,8 @@
 static void 
 handle_route_entry (mib2_ipRouteEntry_t *routeEntry)
 {
-	struct prefix_ipv4	prefix;
- 	struct in_addr		tmpaddr, gateway;
+	struct prefix_ipv4	prefix, gateway;
+ 	struct in_addr		tmpaddr;
 	u_char			zebra_flags = 0;
 
 	if (routeEntry->ipRouteInfo.re_ire_type & IRE_CACHETABLE)
@@ -79,7 +79,7 @@ handle_route_entry (mib2_ipRouteEntry_t *routeEntry)
 	if (routeEntry->ipRouteInfo.re_ire_type & IRE_HOST_REDIRECT)
 		zebra_flags |= ZEBRA_FLAG_SELFROUTE;
 
-	prefix.family = AF_INET;
+	gateway.family = prefix.family = AF_INET;
 
 	tmpaddr.s_addr = routeEntry->ipRouteDest;
 	prefix.prefix = tmpaddr;
@@ -87,10 +87,11 @@ handle_route_entry (mib2_ipRouteEntry_t *routeEntry)
 	tmpaddr.s_addr = routeEntry->ipRouteMask;
 	prefix.prefixlen = ip_masklen (tmpaddr);
 
-	gateway.s_addr = routeEntry->ipRouteNextHop;
-
-	rib_add_ipv4 (ZEBRA_ROUTE_KERNEL, zebra_flags, &prefix,
-		      &gateway, NULL, 0, 0, 0, 0);
+	gateway.prefix.s_addr = routeEntry->ipRouteNextHop;
+	gateway.prefixlen = IPV4_MAX_PREFIXLEN;
+	
+	rib_add (ZEBRA_ROUTE_KERNEL, zebra_flags, &prefix,
+		 &gateway, NULL, 0, 0, 0, 0);
 }
 
 void
