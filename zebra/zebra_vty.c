@@ -78,7 +78,7 @@ zebra_static (struct vty *vty, int add_cmd, const char *dest_str,
   if (distance_str)
     VTY_GET_INTEGER_RANGE("administrative distance", distance, distance_str,
                           1, DISTANCE_INFINITY);
-  
+
   /* Null0 static route.  */
   if ((gate_str != NULL)
       && (strncasecmp (gate_str, "Null0", strlen (gate_str)) == 0))
@@ -188,346 +188,70 @@ zebra_static (struct vty *vty, int add_cmd, const char *dest_str,
 /* Static route configuration.  */
 DEFUN (ip_route, 
        ip_route_cmd,
-       "ip route A.B.C.D/M (A.B.C.D|INTERFACE|null0)",
+       "ip route A.B.C.D/M (A.B.C.D|INTERFACE|null0) [<1-255>]",
        IP_STR
        "Establish static routes\n"
        "IP destination prefix (e.g. 10.0.0.0/8)\n"
        "IP gateway address\n"
        "IP gateway interface name\n"
-       "Null interface\n")
+       "Null interface\n"
+       "Distance value for this prefix\n")
 {
-  return zebra_static (vty, 1, argv[0], NULL, argv[1], NULL, NULL, NULL);
+  const short distpos = 2;
+  const char *dist = (argc == (distpos + 1) ? argv[distpos] : NULL);
+  
+  return zebra_static (vty, 1, argv[0], NULL, argv[1], NULL, NULL, dist);
 }
 
 DEFUN (ip_route_flags,
        ip_route_flags_cmd,
-       "ip route A.B.C.D/M (A.B.C.D|INTERFACE) (reject|blackhole)",
-       IP_STR
-       "Establish static routes\n"
-       "IP destination prefix (e.g. 10.0.0.0/8)\n"
-       "IP gateway address\n"
-       "IP gateway interface name\n"
-       "Emit an ICMP unreachable when matched\n"
-       "Silently discard pkts when matched\n")
-{
-  return zebra_static (vty, 1, argv[0], NULL, argv[1], NULL, argv[2], NULL);
-}
-
-DEFUN (ip_route_flags2,
-       ip_route_flags2_cmd,
-       "ip route A.B.C.D/M (reject|blackhole)",
-       IP_STR
-       "Establish static routes\n"
-       "IP destination prefix (e.g. 10.0.0.0/8)\n"
-       "Emit an ICMP unreachable when matched\n"
-       "Silently discard pkts when matched\n")
-{
-  return zebra_static (vty, 1, argv[0], NULL, NULL, NULL, argv[1], NULL);
-}
-
-/* Mask as A.B.C.D format.  */
-DEFUN (ip_route_mask,
-       ip_route_mask_cmd,
-       "ip route A.B.C.D A.B.C.D (A.B.C.D|INTERFACE|null0)",
-       IP_STR
-       "Establish static routes\n"
-       "IP destination prefix\n"
-       "IP destination prefix mask\n"
-       "IP gateway address\n"
-       "IP gateway interface name\n"
-       "Null interface\n")
-{
-  return zebra_static (vty, 1, argv[0], argv[1], argv[2], NULL, NULL, NULL);
-}
-
-DEFUN (ip_route_mask_flags,
-       ip_route_mask_flags_cmd,
-       "ip route A.B.C.D A.B.C.D (A.B.C.D|INTERFACE) (reject|blackhole)",
-       IP_STR
-       "Establish static routes\n"
-       "IP destination prefix\n"
-       "IP destination prefix mask\n"
-       "IP gateway address\n"
-       "IP gateway interface name\n"
-       "Emit an ICMP unreachable when matched\n"
-       "Silently discard pkts when matched\n")
-{
-  return zebra_static (vty, 1, argv[0], argv[1], argv[2], NULL, argv[3], NULL);
-}
-
-DEFUN (ip_route_mask_flags2,
-       ip_route_mask_flags2_cmd,
-       "ip route A.B.C.D A.B.C.D (reject|blackhole)",
-       IP_STR
-       "Establish static routes\n"
-       "IP destination prefix\n"
-       "IP destination prefix mask\n"
-       "Emit an ICMP unreachable when matched\n"
-       "Silently discard pkts when matched\n")
-{
-  return zebra_static (vty, 1, argv[0], argv[1], NULL, NULL, argv[2], NULL);
-}
-
-/* Distance option value.  */
-DEFUN (ip_route_distance,
-       ip_route_distance_cmd,
-       "ip route A.B.C.D/M (A.B.C.D|INTERFACE|null0) <1-255>",
-       IP_STR
-       "Establish static routes\n"
-       "IP destination prefix (e.g. 10.0.0.0/8)\n"
-       "IP gateway address\n"
-       "IP gateway interface name\n"
-       "Null interface\n"
-       "Distance value for this route\n")
-{
-  return zebra_static (vty, 1, argv[0], NULL, argv[1], NULL, NULL, argv[2]);
-}
-
-DEFUN (ip_route_flags_distance,
-       ip_route_flags_distance_cmd,
-       "ip route A.B.C.D/M (A.B.C.D|INTERFACE) (reject|blackhole) <1-255>",
-       IP_STR
-       "Establish static routes\n"
-       "IP destination prefix (e.g. 10.0.0.0/8)\n"
-       "IP gateway address\n"
-       "IP gateway interface name\n"
-       "Emit an ICMP unreachable when matched\n"
-       "Silently discard pkts when matched\n"
-       "Distance value for this route\n")
-{
-  return zebra_static (vty, 1, argv[0], NULL, argv[1], NULL, argv[2], argv[3]);
-}
-
-DEFUN (ip_route_flags_distance2,
-       ip_route_flags_distance2_cmd,
-       "ip route A.B.C.D/M (reject|blackhole) <1-255>",
+       "ip route A.B.C.D/M (reject|blackhole) [<1-255>]",
        IP_STR
        "Establish static routes\n"
        "IP destination prefix (e.g. 10.0.0.0/8)\n"
        "Emit an ICMP unreachable when matched\n"
        "Silently discard pkts when matched\n"
-       "Distance value for this route\n")
+       "Distance value for this prefix\n")
 {
-  return zebra_static (vty, 1, argv[0], NULL, NULL, NULL, argv[1], argv[2]);
+  const short distpos = 2;
+  const char *dist = (argc == (distpos + 1) ? argv[distpos] : NULL);
+  
+  return zebra_static (vty, 1, argv[0], NULL, NULL, NULL, argv[1], dist);
 }
 
-DEFUN (ip_route_mask_distance,
-       ip_route_mask_distance_cmd,
-       "ip route A.B.C.D A.B.C.D (A.B.C.D|INTERFACE|null0) <1-255>",
-       IP_STR
-       "Establish static routes\n"
-       "IP destination prefix\n"
-       "IP destination prefix mask\n"
-       "IP gateway address\n"
-       "IP gateway interface name\n"
-       "Null interface\n"
-       "Distance value for this route\n")
-{
-  return zebra_static (vty, 1, argv[0], argv[1], argv[2], NULL, NULL, argv[3]);
-}
-
-DEFUN (ip_route_mask_flags_distance,
-       ip_route_mask_flags_distance_cmd,
-       "ip route A.B.C.D A.B.C.D (A.B.C.D|INTERFACE) (reject|blackhole) <1-255>",
-       IP_STR
-       "Establish static routes\n"
-       "IP destination prefix\n"
-       "IP destination prefix mask\n"
-       "IP gateway address\n"
-       "IP gateway interface name\n"
-       "Distance value for this route\n"
-       "Emit an ICMP unreachable when matched\n"
-       "Silently discard pkts when matched\n")
-{
-  return zebra_static (vty, 1, argv[0], argv[1], argv[2], NULL, argv[3], argv[4]);
-}
-
-DEFUN (ip_route_mask_flags_distance2,
-       ip_route_mask_flags_distance2_cmd,
-       "ip route A.B.C.D A.B.C.D (reject|blackhole) <1-255>",
-       IP_STR
-       "Establish static routes\n"
-       "IP destination prefix\n"
-       "IP destination prefix mask\n"
-       "Distance value for this route\n"
-       "Emit an ICMP unreachable when matched\n"
-       "Silently discard pkts when matched\n")
-{
-  return zebra_static (vty, 1, argv[0], argv[1], NULL, NULL, argv[2], argv[3]);
-}
 
 DEFUN (no_ip_route, 
        no_ip_route_cmd,
-       "no ip route A.B.C.D/M (A.B.C.D|INTERFACE|null0)",
+       "no ip route A.B.C.D/M (A.B.C.D|INTERFACE|null0) [<1-255>]",
        NO_STR
        IP_STR
        "Establish static routes\n"
        "IP destination prefix (e.g. 10.0.0.0/8)\n"
        "IP gateway address\n"
        "IP gateway interface name\n"
-       "Null interface\n")
+       "Null interface\n"
+       "Distance value for this prefix\n")
 {
-  return zebra_static (vty, 0, argv[0], NULL, argv[1], NULL, NULL, NULL);
+  const short distpos = 2;
+  const char *dist = (argc == (distpos + 1) ? argv[distpos] : NULL);
+  
+  return zebra_static (vty, 0, argv[0], NULL, argv[1], NULL, NULL, dist);
 }
 
-ALIAS (no_ip_route,
+DEFUN (no_ip_route_flags,
        no_ip_route_flags_cmd,
-       "no ip route A.B.C.D/M (A.B.C.D|INTERFACE) (reject|blackhole)",
-       NO_STR
-       IP_STR
-       "Establish static routes\n"
-       "IP destination prefix (e.g. 10.0.0.0/8)\n"
-       "IP gateway address\n"
-       "IP gateway interface name\n"
-       "Emit an ICMP unreachable when matched\n"
-       "Silently discard pkts when matched\n")
-
-DEFUN (no_ip_route_flags2,
-       no_ip_route_flags2_cmd,
-       "no ip route A.B.C.D/M (reject|blackhole)",
-       NO_STR
-       IP_STR
-       "Establish static routes\n"
-       "IP destination prefix (e.g. 10.0.0.0/8)\n"
-       "Emit an ICMP unreachable when matched\n"
-       "Silently discard pkts when matched\n")
-{
-  return zebra_static (vty, 0, argv[0], NULL, NULL, NULL, NULL, NULL);
-}
-
-DEFUN (no_ip_route_mask,
-       no_ip_route_mask_cmd,
-       "no ip route A.B.C.D A.B.C.D (A.B.C.D|INTERFACE|null0)",
-       NO_STR
-       IP_STR
-       "Establish static routes\n"
-       "IP destination prefix\n"
-       "IP destination prefix mask\n"
-       "IP gateway address\n"
-       "IP gateway interface name\n"
-       "Null interface\n")
-{
-  return zebra_static (vty, 0, argv[0], argv[1], argv[2], NULL, NULL, NULL);
-}
-
-ALIAS (no_ip_route_mask,
-       no_ip_route_mask_flags_cmd,
-       "no ip route A.B.C.D A.B.C.D (A.B.C.D|INTERFACE) (reject|blackhole)",
-       NO_STR
-       IP_STR
-       "Establish static routes\n"
-       "IP destination prefix\n"
-       "IP destination prefix mask\n"
-       "IP gateway address\n"
-       "IP gateway interface name\n"
-       "Emit an ICMP unreachable when matched\n"
-       "Silently discard pkts when matched\n")
-
-DEFUN (no_ip_route_mask_flags2,
-       no_ip_route_mask_flags2_cmd,
-       "no ip route A.B.C.D A.B.C.D (reject|blackhole)",
-       NO_STR
-       IP_STR
-       "Establish static routes\n"
-       "IP destination prefix\n"
-       "IP destination prefix mask\n"
-       "Emit an ICMP unreachable when matched\n"
-       "Silently discard pkts when matched\n")
-{
-  return zebra_static (vty, 0, argv[0], argv[1], NULL, NULL, NULL, NULL);
-}
-
-DEFUN (no_ip_route_distance,
-       no_ip_route_distance_cmd,
-       "no ip route A.B.C.D/M (A.B.C.D|INTERFACE|null0) <1-255>",
-       NO_STR
-       IP_STR
-       "Establish static routes\n"
-       "IP destination prefix (e.g. 10.0.0.0/8)\n"
-       "IP gateway address\n"
-       "IP gateway interface name\n"
-       "Null interface\n"
-       "Distance value for this route\n")
-{
-  return zebra_static (vty, 0, argv[0], NULL, argv[1], NULL, NULL, argv[2]);
-}
-
-DEFUN (no_ip_route_flags_distance,
-       no_ip_route_flags_distance_cmd,
-       "no ip route A.B.C.D/M (A.B.C.D|INTERFACE) (reject|blackhole) <1-255>",
-       NO_STR
-       IP_STR
-       "Establish static routes\n"
-       "IP destination prefix (e.g. 10.0.0.0/8)\n"
-       "IP gateway address\n"
-       "IP gateway interface name\n"
-       "Emit an ICMP unreachable when matched\n"
-       "Silently discard pkts when matched\n"
-       "Distance value for this route\n")
-{
-  return zebra_static (vty, 0, argv[0], NULL, argv[1], NULL, argv[2], argv[3]);
-}
-
-DEFUN (no_ip_route_flags_distance2,
-       no_ip_route_flags_distance2_cmd,
-       "no ip route A.B.C.D/M (reject|blackhole) <1-255>",
+       "no ip route A.B.C.D/M (reject|blackhole) [<1-255>]",
        NO_STR
        IP_STR
        "Establish static routes\n"
        "IP destination prefix (e.g. 10.0.0.0/8)\n"
        "Emit an ICMP unreachable when matched\n"
        "Silently discard pkts when matched\n"
-       "Distance value for this route\n")
+       "Distance value for this prefix\n")
 {
-  return zebra_static (vty, 0, argv[0], NULL, NULL, NULL, argv[1], argv[2]);
-}
-
-DEFUN (no_ip_route_mask_distance,
-       no_ip_route_mask_distance_cmd,
-       "no ip route A.B.C.D A.B.C.D (A.B.C.D|INTERFACE|null0) <1-255>",
-       NO_STR
-       IP_STR
-       "Establish static routes\n"
-       "IP destination prefix\n"
-       "IP destination prefix mask\n"
-       "IP gateway address\n"
-       "IP gateway interface name\n"
-       "Null interface\n"
-       "Distance value for this route\n")
-{
-  return zebra_static (vty, 0, argv[0], argv[1], argv[2], NULL, NULL, argv[3]);
-}
-
-DEFUN (no_ip_route_mask_flags_distance,
-       no_ip_route_mask_flags_distance_cmd,
-       "no ip route A.B.C.D A.B.C.D (A.B.C.D|INTERFACE) (reject|blackhole) <1-255>",
-       NO_STR
-       IP_STR
-       "Establish static routes\n"
-       "IP destination prefix\n"
-       "IP destination prefix mask\n"
-       "IP gateway address\n"
-       "IP gateway interface name\n"
-       "Emit an ICMP unreachable when matched\n"
-       "Silently discard pkts when matched\n"
-       "Distance value for this route\n")
-{
-  return zebra_static (vty, 0, argv[0], argv[1], argv[2], NULL, argv[3], argv[4]);
-}
-
-DEFUN (no_ip_route_mask_flags_distance2,
-       no_ip_route_mask_flags_distance2_cmd,
-       "no ip route A.B.C.D A.B.C.D (reject|blackhole) <1-255>",
-       NO_STR
-       IP_STR
-       "Establish static routes\n"
-       "IP destination prefix\n"
-       "IP destination prefix mask\n"
-       "Emit an ICMP unreachable when matched\n"
-       "Silently discard pkts when matched\n"
-       "Distance value for this route\n")
-{
-  return zebra_static (vty, 0, argv[0], argv[1], NULL, NULL, argv[2], argv[3]);
+  const short distpos = 3;
+  const char *dist = (argc == (distpos + 1) ? argv[distpos] : NULL);
+  return zebra_static (vty, 0, argv[0], NULL, NULL, NULL, argv[1], dist);
 }
 
 char *proto_rm[AFI_MAX][ZEBRA_ROUTE_MAX+1];	/* "any" == ZEBRA_ROUTE_MAX */
@@ -1200,59 +924,39 @@ DEFUN (show_ip_protocol,
 #ifdef HAVE_IPV6
 DEFUN (ipv6_route,
        ipv6_route_cmd,
-       "ipv6 route X:X::X:X/M (X:X::X:X|INTERFACE)",
+       "ipv6 route X:X::X:X/M (X:X::X:X|INTERFACE) [<1-255>]",
        IP_STR
        "Establish static routes\n"
        "IPv6 destination prefix (e.g. 3ffe:506::/32)\n"
        "IPv6 gateway address\n"
-       "IPv6 gateway interface name\n")
+       "IPv6 gateway interface name\n"
+       "Distance value for this prefix\n")
 {
-  return zebra_static (vty, 1, argv[0], NULL, argv[1], NULL, NULL, NULL);
+  const short distpos = 2;
+  const char *dist = (argc == (distpos + 1) ? argv[distpos] : NULL);
+  
+  return zebra_static (vty, 1, argv[0], NULL, argv[1], NULL, NULL, dist);
 }
 
 DEFUN (ipv6_route_flags,
        ipv6_route_flags_cmd,
-       "ipv6 route X:X::X:X/M (X:X::X:X|INTERFACE) (reject|blackhole)",
+       "ipv6 route X:X::X:X/M (reject|blackhole) [<1-255>]",
        IP_STR
        "Establish static routes\n"
        "IPv6 destination prefix (e.g. 3ffe:506::/32)\n"
-       "IPv6 gateway address\n"
-       "IPv6 gateway interface name\n"
        "Emit an ICMP unreachable when matched\n"
-       "Silently discard pkts when matched\n")
+       "Silently discard pkts when matched\n"
+       "Distance value for this prefix\n")
 {
-  return zebra_static (vty, 1, argv[0], NULL, argv[1], NULL, argv[2], NULL);
+  const short distpos = 2;
+  const char *dist = (argc == (distpos + 1) ? argv[distpos] : NULL);
+    
+  return zebra_static (vty, 1, argv[0], NULL, NULL, NULL, argv[1], dist);
 }
 
 DEFUN (ipv6_route_ifname,
        ipv6_route_ifname_cmd,
-       "ipv6 route X:X::X:X/M X:X::X:X INTERFACE",
-       IP_STR
-       "Establish static routes\n"
-       "IPv6 destination prefix (e.g. 3ffe:506::/32)\n"
-       "IPv6 gateway address\n"
-       "IPv6 gateway interface name\n")
-{
-  return zebra_static (vty, 1, argv[0], NULL, argv[1], argv[2], NULL, NULL);
-}
-
-DEFUN (ipv6_route_ifname_flags,
-       ipv6_route_ifname_flags_cmd,
-       "ipv6 route X:X::X:X/M X:X::X:X INTERFACE (reject|blackhole)",
-       IP_STR
-       "Establish static routes\n"
-       "IPv6 destination prefix (e.g. 3ffe:506::/32)\n"
-       "IPv6 gateway address\n"
-       "IPv6 gateway interface name\n"
-       "Emit an ICMP unreachable when matched\n"
-       "Silently discard pkts when matched\n")
-{
-  return zebra_static (vty, 1, argv[0], NULL, argv[1], argv[2], argv[3], NULL);
-}
-
-DEFUN (ipv6_route_pref,
-       ipv6_route_pref_cmd,
-       "ipv6 route X:X::X:X/M (X:X::X:X|INTERFACE) <1-255>",
+       "ipv6 route X:X::X:X/M X:X::X:X INTERFACE [<1-255>]",
        IP_STR
        "Establish static routes\n"
        "IPv6 destination prefix (e.g. 3ffe:506::/32)\n"
@@ -1260,80 +964,32 @@ DEFUN (ipv6_route_pref,
        "IPv6 gateway interface name\n"
        "Distance value for this prefix\n")
 {
-  return zebra_static (vty, 1, argv[0], NULL, argv[1], NULL, NULL, argv[2]);
-}
-
-DEFUN (ipv6_route_flags_pref,
-       ipv6_route_flags_pref_cmd,
-       "ipv6 route X:X::X:X/M (X:X::X:X|INTERFACE) (reject|blackhole) <1-255>",
-       IP_STR
-       "Establish static routes\n"
-       "IPv6 destination prefix (e.g. 3ffe:506::/32)\n"
-       "IPv6 gateway address\n"
-       "IPv6 gateway interface name\n"
-       "Emit an ICMP unreachable when matched\n"
-       "Silently discard pkts when matched\n"
-       "Distance value for this prefix\n")
-{
-  return zebra_static (vty, 1, argv[0], NULL, argv[1], NULL, argv[2], argv[3]);
-}
-
-DEFUN (ipv6_route_ifname_pref,
-       ipv6_route_ifname_pref_cmd,
-       "ipv6 route X:X::X:X/M X:X::X:X INTERFACE <1-255>",
-       IP_STR
-       "Establish static routes\n"
-       "IPv6 destination prefix (e.g. 3ffe:506::/32)\n"
-       "IPv6 gateway address\n"
-       "IPv6 gateway interface name\n"
-       "Distance value for this prefix\n")
-{
-  return zebra_static (vty, 1, argv[0], NULL, argv[1], argv[2], NULL, argv[3]);
-}
-
-DEFUN (ipv6_route_ifname_flags_pref,
-       ipv6_route_ifname_flags_pref_cmd,
-       "ipv6 route X:X::X:X/M X:X::X:X INTERFACE (reject|blackhole) <1-255>",
-       IP_STR
-       "Establish static routes\n"
-       "IPv6 destination prefix (e.g. 3ffe:506::/32)\n"
-       "IPv6 gateway address\n"
-       "IPv6 gateway interface name\n"
-       "Emit an ICMP unreachable when matched\n"
-       "Silently discard pkts when matched\n"
-       "Distance value for this prefix\n")
-{
-  return zebra_static (vty, 1, argv[0], NULL, argv[1], argv[2], argv[3], argv[4]);
+  const short distpos = 3;
+  const char *dist = (argc == (distpos + 1) ? argv[distpos] : NULL);
+  
+  return zebra_static (vty, 1, argv[0], NULL, argv[1], argv[2], NULL, dist);
 }
 
 DEFUN (no_ipv6_route,
        no_ipv6_route_cmd,
-       "no ipv6 route X:X::X:X/M (X:X::X:X|INTERFACE)",
-       NO_STR
-       IP_STR
-       "Establish static routes\n"
-       "IPv6 destination prefix (e.g. 3ffe:506::/32)\n"
-       "IPv6 gateway address\n"
-       "IPv6 gateway interface name\n")
-{
-  return zebra_static (vty, 0, argv[0], NULL, argv[1], NULL, NULL, NULL);
-}
-
-ALIAS (no_ipv6_route,
-       no_ipv6_route_flags_cmd,
-       "no ipv6 route X:X::X:X/M (X:X::X:X|INTERFACE) (reject|blackhole)",
+       "no ipv6 route X:X::X:X/M (X:X::X:X|INTERFACE) [<1-255>]",
        NO_STR
        IP_STR
        "Establish static routes\n"
        "IPv6 destination prefix (e.g. 3ffe:506::/32)\n"
        "IPv6 gateway address\n"
        "IPv6 gateway interface name\n"
-       "Emit an ICMP unreachable when matched\n"
-       "Silently discard pkts when matched\n")
+       "Distance value for this prefix\n")
+{
+  const short distpos = 2;
+  const char *dist = (argc == (distpos + 1) ? argv[distpos] : NULL);
+  
+  return zebra_static (vty, 0, argv[0], NULL, argv[1], NULL, NULL, dist);
+}
 
 DEFUN (no_ipv6_route_ifname,
        no_ipv6_route_ifname_cmd,
-       "no ipv6 route X:X::X:X/M X:X::X:X INTERFACE",
+       "no ipv6 route X:X::X:X/M X:X::X:X INTERFACE [<1-255>]",
        NO_STR
        IP_STR
        "Establish static routes\n"
@@ -1341,80 +997,26 @@ DEFUN (no_ipv6_route_ifname,
        "IPv6 gateway address\n"
        "IPv6 gateway interface name\n")
 {
-  return zebra_static (vty, 0, argv[0], NULL, argv[1], argv[2], NULL, NULL);
+  const short distpos = 3;
+  const char *dist = (argc == (distpos + 1) ? argv[distpos] : NULL);
+  
+  return zebra_static (vty, 0, argv[0], NULL, argv[1], argv[2], NULL, dist);
 }
 
-ALIAS (no_ipv6_route_ifname,
-       no_ipv6_route_ifname_flags_cmd,
-       "no ipv6 route X:X::X:X/M X:X::X:X INTERFACE (reject|blackhole)",
+DEFUN (no_ipv6_route_flags,
+       no_ipv6_route_flags_cmd,
+       "no ipv6 route X:X::X:X/M (reject|blackhole) [<1-255>]",
        NO_STR
        IP_STR
        "Establish static routes\n"
        "IPv6 destination prefix (e.g. 3ffe:506::/32)\n"
-       "IPv6 gateway address\n"
-       "IPv6 gateway interface name\n"
-       "Emit an ICMP unreachable when matched\n"
-       "Silently discard pkts when matched\n")
-
-DEFUN (no_ipv6_route_pref,
-       no_ipv6_route_pref_cmd,
-       "no ipv6 route X:X::X:X/M (X:X::X:X|INTERFACE) <1-255>",
-       NO_STR
-       IP_STR
-       "Establish static routes\n"
-       "IPv6 destination prefix (e.g. 3ffe:506::/32)\n"
-       "IPv6 gateway address\n"
-       "IPv6 gateway interface name\n"
-       "Distance value for this prefix\n")
-{
-  return zebra_static (vty, 0, argv[0], NULL, argv[1], NULL, NULL, argv[2]);
-}
-
-DEFUN (no_ipv6_route_flags_pref,
-       no_ipv6_route_flags_pref_cmd,
-       "no ipv6 route X:X::X:X/M (X:X::X:X|INTERFACE) (reject|blackhole) <1-255>",
-       NO_STR
-       IP_STR
-       "Establish static routes\n"
-       "IPv6 destination prefix (e.g. 3ffe:506::/32)\n"
-       "IPv6 gateway address\n"
-       "IPv6 gateway interface name\n"
        "Emit an ICMP unreachable when matched\n"
        "Silently discard pkts when matched\n"
        "Distance value for this prefix\n")
 {
-  /* We do not care about argv[2] */
-  return zebra_static (vty, 0, argv[0], NULL, argv[1], NULL, argv[2], argv[3]);
-}
-
-DEFUN (no_ipv6_route_ifname_pref,
-       no_ipv6_route_ifname_pref_cmd,
-       "no ipv6 route X:X::X:X/M X:X::X:X INTERFACE <1-255>",
-       NO_STR
-       IP_STR
-       "Establish static routes\n"
-       "IPv6 destination prefix (e.g. 3ffe:506::/32)\n"
-       "IPv6 gateway address\n"
-       "IPv6 gateway interface name\n"
-       "Distance value for this prefix\n")
-{
-  return zebra_static (vty, 0, argv[0], NULL, argv[1], argv[2], NULL, argv[3]);
-}
-
-DEFUN (no_ipv6_route_ifname_flags_pref,
-       no_ipv6_route_ifname_flags_pref_cmd,
-       "no ipv6 route X:X::X:X/M X:X::X:X INTERFACE (reject|blackhole) <1-255>",
-       NO_STR
-       IP_STR
-       "Establish static routes\n"
-       "IPv6 destination prefix (e.g. 3ffe:506::/32)\n"
-       "IPv6 gateway address\n"
-       "IPv6 gateway interface name\n"
-       "Emit an ICMP unreachable when matched\n"
-       "Silently discard pkts when matched\n"
-       "Distance value for this prefix\n")
-{
-  return zebra_static (vty, 0, argv[0], NULL, argv[1], argv[2], argv[3], argv[4]);
+  const short distpos = 2;
+  const char *dist = (argc == (distpos + 1) ? argv[distpos] : NULL);
+  return zebra_static (vty, 0, argv[0], NULL, argv[1], NULL, argv[2], dist);
 }
 
 #define SHOW_ROUTE_V6_HEADER "Codes: K - kernel route, C - connected, S - static, R - RIPng, O - OSPFv3,%s       I - ISIS, B - BGP, * - FIB route.%s%s"
@@ -1685,6 +1287,8 @@ static struct cmd_node protocol_node = { PROTOCOL_NODE, "", 1 };
 /* IP node for static routes. */
 static struct cmd_node ip_node = { IP_NODE,  "",  1 };
 
+#include "zebra_old_cmds.c"
+
 /* Route VTY.  */
 void
 zebra_vty_init (void)
@@ -1698,27 +1302,8 @@ zebra_vty_init (void)
   install_element (ENABLE_NODE, &show_ip_protocol_cmd);
   install_element (CONFIG_NODE, &ip_route_cmd);
   install_element (CONFIG_NODE, &ip_route_flags_cmd);
-  install_element (CONFIG_NODE, &ip_route_flags2_cmd);
-  install_element (CONFIG_NODE, &ip_route_mask_cmd);
-  install_element (CONFIG_NODE, &ip_route_mask_flags_cmd);
-  install_element (CONFIG_NODE, &ip_route_mask_flags2_cmd);
   install_element (CONFIG_NODE, &no_ip_route_cmd);
   install_element (CONFIG_NODE, &no_ip_route_flags_cmd);
-  install_element (CONFIG_NODE, &no_ip_route_flags2_cmd);
-  install_element (CONFIG_NODE, &no_ip_route_mask_cmd);
-  install_element (CONFIG_NODE, &no_ip_route_mask_flags_cmd);
-  install_element (CONFIG_NODE, &no_ip_route_mask_flags2_cmd);
-  install_element (CONFIG_NODE, &ip_route_distance_cmd);
-  install_element (CONFIG_NODE, &ip_route_flags_distance_cmd);
-  install_element (CONFIG_NODE, &ip_route_flags_distance2_cmd);
-  install_element (CONFIG_NODE, &ip_route_mask_distance_cmd);
-  install_element (CONFIG_NODE, &ip_route_mask_flags_distance_cmd);
-  install_element (CONFIG_NODE, &ip_route_mask_flags_distance2_cmd);
-  install_element (CONFIG_NODE, &no_ip_route_distance_cmd);
-  install_element (CONFIG_NODE, &no_ip_route_flags_distance_cmd);
-  install_element (CONFIG_NODE, &no_ip_route_flags_distance2_cmd);
-  install_element (CONFIG_NODE, &no_ip_route_mask_flags_distance_cmd);
-  install_element (CONFIG_NODE, &no_ip_route_mask_flags_distance2_cmd);
 
   install_element (VIEW_NODE, &show_ip_route_cmd);
   install_element (VIEW_NODE, &show_ip_route_addr_cmd);
@@ -1739,19 +1324,9 @@ zebra_vty_init (void)
   install_element (CONFIG_NODE, &ipv6_route_cmd);
   install_element (CONFIG_NODE, &ipv6_route_flags_cmd);
   install_element (CONFIG_NODE, &ipv6_route_ifname_cmd);
-  install_element (CONFIG_NODE, &ipv6_route_ifname_flags_cmd);
   install_element (CONFIG_NODE, &no_ipv6_route_cmd);
   install_element (CONFIG_NODE, &no_ipv6_route_flags_cmd);
   install_element (CONFIG_NODE, &no_ipv6_route_ifname_cmd);
-  install_element (CONFIG_NODE, &no_ipv6_route_ifname_flags_cmd);
-  install_element (CONFIG_NODE, &ipv6_route_pref_cmd);
-  install_element (CONFIG_NODE, &ipv6_route_flags_pref_cmd);
-  install_element (CONFIG_NODE, &ipv6_route_ifname_pref_cmd);
-  install_element (CONFIG_NODE, &ipv6_route_ifname_flags_pref_cmd);
-  install_element (CONFIG_NODE, &no_ipv6_route_pref_cmd);
-  install_element (CONFIG_NODE, &no_ipv6_route_flags_pref_cmd);
-  install_element (CONFIG_NODE, &no_ipv6_route_ifname_pref_cmd);
-  install_element (CONFIG_NODE, &no_ipv6_route_ifname_flags_pref_cmd);
   install_element (VIEW_NODE, &show_ipv6_route_cmd);
   install_element (VIEW_NODE, &show_ipv6_route_summary_cmd);
   install_element (VIEW_NODE, &show_ipv6_route_protocol_cmd);
@@ -1765,4 +1340,6 @@ zebra_vty_init (void)
   install_element (ENABLE_NODE, &show_ipv6_route_prefix_longer_cmd);
   install_element (ENABLE_NODE, &show_ipv6_route_summary_cmd);
 #endif /* HAVE_IPV6 */
+
+  zebra_vty_old_init ();
 }
