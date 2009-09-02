@@ -218,12 +218,8 @@ rib_match (struct prefix *addr)
   if (! table)
     return 0;
   
-  rn = route_node_match (table, addr);
-  
-  while (rn)
+  for (rn = route_node_match (table, addr); rn; rn = route_node_parent (rn))
     {
-      route_unlock_node (rn);
-      
       /* Pick up selected route. */
       for (match = rn->info; match; match = match->next)
 	{
@@ -235,29 +231,19 @@ rib_match (struct prefix *addr)
 
       /* If there is no selected route or matched route is EGP, go up
          tree. */
-      if (! match 
-	  || match->type == ZEBRA_ROUTE_BGP)
-	{
-	  do {
-	    rn = rn->parent;
-	  } while (rn && rn->info == NULL);
-	  if (rn)
-	    route_lock_node (rn);
-	}
-      else
-	{
-	  if (match->type == ZEBRA_ROUTE_CONNECT)
-	    /* Directly point connected route. */
-	    return match;
-	  else
-	    {
-	      for (newhop = match->nexthop; newhop; newhop = newhop->next)
-		if (CHECK_FLAG (newhop->flags, NEXTHOP_FLAG_FIB))
-		  return match;
-              /* XXX: Why don't we walk up for this case? */
-	      return NULL;
-	    }
-	}
+      if (!match || match->type == ZEBRA_ROUTE_BGP)
+	continue;
+      
+      if (match->type == ZEBRA_ROUTE_CONNECT)
+        /* Directly point connected route. */
+        return match;
+      
+      /* This is meaningless if ZEBRA_FLAG_SELECTED implies
+       * there must be a NEXTHOP_FLAG_FIB nexthop
+       */
+      for (newhop = match->nexthop; newhop; newhop = newhop->next)
+        if (CHECK_FLAG (newhop->flags, NEXTHOP_FLAG_FIB))
+          return match;
     }
   return NULL;
 }
@@ -406,12 +392,12 @@ nexthop_gate_active (struct rib *rib, struct nexthop *nexthop, int set,
   table = vrf_table (family2afi (nexthop->gate->family), SAFI_UNICAST, 0);
   if (! table)
     return 0;
-
-  rn = route_node_match (table, nexthop->gate);
-  while (rn)
+  
+  
+  for (rn = route_node_match (table, nexthop->gate);
+       rn; 
+       rn = route_node_parent (rn))
     {
-      route_unlock_node (rn);
-      
       /* If lookup self prefix return immidiately. */
       if (rn == top)
 	return 0;
@@ -427,57 +413,37 @@ nexthop_gate_active (struct rib *rib, struct nexthop *nexthop, int set,
 
       /* If there is no selected route or matched route is EGP, go up
          tree. */
-      if (! match 
-	  || match->type == ZEBRA_ROUTE_BGP)
-	{
-	  do {
-	    rn = rn->parent;
-	  } while (rn && rn->info == NULL);
-	  if (rn)
-	    route_lock_node (rn);
-	}
-      else
-	{
-	  if (match->type == ZEBRA_ROUTE_CONNECT)
-	    {
-	      /* Directly point connected route. */
-	      
-	      /* Why would this needed???
-	      newhop = match->nexthop;
-	      if (newhop && nexthop->type == NEXTHOP_TYPE_IPV4)
-		nexthop->ifindex = newhop->ifindex;
-	      */
-	      return 1;
-	    }
-	  else if (CHECK_FLAG (rib->flags, ZEBRA_FLAG_INTERNAL))
-	    {
-	      for (newhop = match->nexthop; newhop; newhop = newhop->next)
-		if (CHECK_FLAG (newhop->flags, NEXTHOP_FLAG_FIB)
-		    && ! CHECK_FLAG (newhop->flags, NEXTHOP_FLAG_RECURSIVE))
-		  {
-		    if (set)
-		      {
-			SET_FLAG (nexthop->flags, NEXTHOP_FLAG_RECURSIVE);
-			
-			if (newhop->gate)
-			  {
-			    if (!nexthop->rgate)
-			      nexthop->rgate = prefix_new ();
-			    prefix_copy (nexthop->rgate, newhop->gate);
-                          }
-                        
-			if (newhop->ifindex != IFINDEX_INTERNAL)
-			  nexthop->rifindex = newhop->ifindex;
-		      }
-		    return 1;
-		  }
-	      return 0;
-	    }
-	  else
-	    {
-	      return 0;
-	    }
-	}
+      if (!match || match->type == ZEBRA_ROUTE_BGP)
+        continue;
+      
+      if (match->type == ZEBRA_ROUTE_CONNECT)
+        /* Directly point connected route. */
+        return 1;
+      
+      if (CHECK_FLAG (rib->flags, ZEBRA_FLAG_INTERNAL))
+        {
+          for (newhop = match->nexthop; newhop; newhop = newhop->next)
+            if (CHECK_FLAG (newhop->flags, NEXTHOP_FLAG_FIB)
+                && ! CHECK_FLAG (newhop->flags, NEXTHOP_FLAG_RECURSIVE))
+              {
+                if (set)
+                  {
+                    SET_FLAG (nexthop->flags, NEXTHOP_FLAG_RECURSIVE);
+                    
+                    if (newhop->gate)
+                      {
+                        if (!nexthop->rgate)
+                          nexthop->rgate = prefix_new ();
+                        prefix_copy (nexthop->rgate, newhop->gate);
+                      }
+                    
+                    if (newhop->ifindex != IFINDEX_INTERNAL)
+                      nexthop->rifindex = newhop->ifindex;
+                  }
+                return 1;
+              }
+          return 0;
+        }
     }
   return 0;
 }
@@ -542,7 +508,7 @@ nexthop_active_check (struct route_node *rn, struct rib *rib,
   if (!rmap && proto_rm[rn->p.family][ZEBRA_ROUTE_MAX])
     rmap = route_map_lookup_by_name (proto_rm[rn->p.family][ZEBRA_ROUTE_MAX]);
   if (rmap) {
-      ret = route_map_apply(rmap, &rn->p, RMAP_ZEBRA, nexthop);
+    ret = route_map_apply(rmap, &rn->p, RMAP_ZEBRA, nexthop);
   }
 
   if (ret == RMAP_DENYMATCH)
@@ -562,20 +528,20 @@ static int
 nexthop_active_update (struct route_node *rn, struct rib *rib, int set)
 {
   struct nexthop *nexthop;
-  unsigned int prev_active, new_active;
-  ifindex_t prev_index;
 
   rib->nexthop_active_num = 0;
   UNSET_FLAG (rib->flags, ZEBRA_FLAG_CHANGED);
 
   for (nexthop = rib->nexthop; nexthop; nexthop = nexthop->next)
   {
-    prev_active = CHECK_FLAG (nexthop->flags, NEXTHOP_FLAG_ACTIVE);
-    prev_index = nexthop->ifindex;
-    if ((new_active = nexthop_active_check (rn, rib, nexthop, set)))
+    int prev_active = CHECK_FLAG (nexthop->flags, NEXTHOP_FLAG_ACTIVE);
+    ifindex_t prev_index = nexthop->ifindex;
+    int new_active = nexthop_active_check (rn, rib, nexthop, set);
+    
+    if (new_active)
       rib->nexthop_active_num++;
-    if (prev_active != new_active ||
-	prev_index != nexthop->ifindex)
+    
+    if (prev_active != new_active || prev_index != nexthop->ifindex)
       SET_FLAG (rib->flags, ZEBRA_FLAG_CHANGED);
   }
   
