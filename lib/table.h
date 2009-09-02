@@ -61,6 +61,7 @@ extern struct route_node *route_top (struct route_table *);
 extern struct route_node *route_next (struct route_node *);
 extern struct route_node *route_next_until (struct route_node *,
                                             struct route_node *);
+extern struct route_node *route_node_parent (struct route_node *);
 extern struct route_node *route_node_get (struct route_table *,
                                           struct prefix *);
 extern struct route_node *route_node_lookup (struct route_table *,

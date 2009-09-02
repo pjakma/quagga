@@ -501,3 +501,21 @@ route_next_until (struct route_node *node, struct route_node *limit)
   route_unlock_node (start);
   return NULL;
 }
+
+struct route_node *
+route_node_parent (struct route_node *node)
+{
+  if (!node)
+    return NULL;
+  
+  route_unlock_node (node);
+  
+  do {
+    node = node->parent;
+  } while (node && !node->info);
+  
+  if (node)
+    route_lock_node (node);
+  
+  return node;
+}
