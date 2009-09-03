@@ -54,6 +54,8 @@ struct nexthop
 
 extern struct nexthop *nexthop_new (void);
 extern void nexthop_free (struct nexthop *);
+extern void nexthop_scrub (struct nexthop *);
+extern void nexthop_copy (struct nexthop *dst, struct nexthop *src);
 
 extern void nexthop_add (struct nexthop **, struct nexthop *);
 extern void nexthop_delete (struct nexthop **, struct nexthop *);

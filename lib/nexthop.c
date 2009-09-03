@@ -36,9 +36,9 @@ nexthop_new (void)
   return nh;
 }
 
-/* Free nexthop. */
+/* scrub contents of nexthop, but leave it allocated otherwise */
 void
-nexthop_free (struct nexthop *nh)
+nexthop_scrub (struct nexthop *nh)
 {
   if (nh->gate)
     prefix_free (nh->gate);
@@ -46,8 +46,28 @@ nexthop_free (struct nexthop *nh)
     prefix_free (nh->gate);
   if (nh->src)
     prefix_free (nh->src);
-  
+  memset (nh, 0, sizeof (struct nexthop));
+}
+/* Free nexthop. */
+void
+nexthop_free (struct nexthop *nh)
+{
+  nexthop_scrub (nh);
   XFREE (MTYPE_NEXTHOP, nh);
+}
+
+/* deep copy nexthops */
+void
+nexthop_copy (struct nexthop *dst, struct nexthop *src)
+{
+  memcpy (dst, src, sizeof (struct nexthop));
+  
+  if (src->gate)
+    prefix_copy ((dst->gate = prefix_new ()), src->gate);
+  if (src->rgate)
+    prefix_copy ((dst->rgate = prefix_new ()), src->rgate);
+  if (src->src)
+    prefix_copy ((dst->src = prefix_new ()), src->src);
 }
 
 int
@@ -55,30 +75,39 @@ nexthop_same (struct nexthop *next1, struct nexthop *next2)
 {
   /* If set on either, then blackhole flag must be set on both */
   if (CHECK_FLAG (next1->flags, NEXTHOP_FLAG_BLACKHOLE)
-      || CHECK_FLAG (next2->flags, ZEBRA_FLAG_BLACKHOLE))
+      || CHECK_FLAG (next2->flags, NEXTHOP_FLAG_BLACKHOLE))
     {
       return (CHECK_FLAG (next1->flags, NEXTHOP_FLAG_BLACKHOLE)
-              && CHECK_FLAG (next2->flags, ZEBRA_FLAG_BLACKHOLE));
+              && CHECK_FLAG (next2->flags, NEXTHOP_FLAG_BLACKHOLE));
     }
   
-  if (next1->gate || next2->gate)
+  if (next1->ifindex != next2->ifindex)
+    return 0;
+  
+/* If either is set: then they both must be, and they must be equal */
+#define CMP_GATE(a,b) \
+  if ((a) || (b)) \
+    if (!(a) || !(b) || !prefix_same ((a), (b))) \
+      return 0;
+  
+  CMP_GATE(next1->gate, next2->gate);
+  
+  if (CHECK_FLAG (next1->flags, NEXTHOP_FLAG_RECURSIVE)
+      || CHECK_FLAG (next2->flags, NEXTHOP_FLAG_RECURSIVE))
     {
-      if (!next1->gate || !next2->gate)
+      if (!(CHECK_FLAG (next1->flags, NEXTHOP_FLAG_RECURSIVE)
+            && CHECK_FLAG (next2->flags, NEXTHOP_FLAG_RECURSIVE)))
         return 0;
       
-      if (!prefix_same (next1->gate, next2->gate))
+      if (next1->rifindex != next2->rifindex)
         return 0;
-    }
-  
-  if (next1->ifindex != IFINDEX_INTERNAL ||
-      next2->ifindex)
-    {
-      if (next1->ifindex != !next2->ifindex)
-        return 0;
+      
+      CMP_GATE (next1->rgate, next2->rgate);
     }
   
   /* everything must be the same */
   return 1;
+#undef CMP_GATE
 }
 
 void

@@ -371,6 +371,8 @@ rib_lookup_route (struct prefix *p, struct prefix *qgate)
   return ZEBRA_RIB_NOTFOUND;
 }
 
+static int nexthop_active_update (struct route_node *, struct rib *, int);
+
 /* If force flag is not set, do not modify falgs at all for uninstall
    the route from FIB. */
 static int
@@ -393,7 +395,6 @@ nexthop_gate_active (struct rib *rib, struct nexthop *nexthop, int set,
   if (! table)
     return 0;
   
-  
   for (rn = route_node_match (table, nexthop->gate);
        rn; 
        rn = route_node_parent (rn))
@@ -411,40 +412,54 @@ nexthop_gate_active (struct rib *rib, struct nexthop *nexthop, int set,
 	    break;
 	}
 
-      /* If there is no selected route or matched route is EGP, go up
+      /* If there is no selected route or matched route is EGP, keep going up
          tree. */
       if (!match || match->type == ZEBRA_ROUTE_BGP)
         continue;
       
-      if (match->type == ZEBRA_ROUTE_CONNECT)
-        /* Directly point connected route. */
-        return 1;
-      
-      if (CHECK_FLAG (rib->flags, ZEBRA_FLAG_INTERNAL))
-        {
-          for (newhop = match->nexthop; newhop; newhop = newhop->next)
-            if (CHECK_FLAG (newhop->flags, NEXTHOP_FLAG_FIB)
-                && ! CHECK_FLAG (newhop->flags, NEXTHOP_FLAG_RECURSIVE))
-              {
-                if (set)
-                  {
-                    SET_FLAG (nexthop->flags, NEXTHOP_FLAG_RECURSIVE);
-                    
-                    if (newhop->gate)
-                      {
-                        if (!nexthop->rgate)
-                          nexthop->rgate = prefix_new ();
-                        prefix_copy (nexthop->rgate, newhop->gate);
-                      }
-                    
-                    if (newhop->ifindex != IFINDEX_INTERNAL)
-                      nexthop->rifindex = newhop->ifindex;
-                  }
-                return 1;
-              }
-          return 0;
-        }
+      if (match)
+        break;
     }
+  
+  /* Not active: no usable route found */
+  if (!match)
+    return 0;
+  
+  /* Whatever else, the matched route has to be active for any dependent
+   * route to be active, or no point going on.
+   */
+  if (!nexthop_active_update (rn, match, 0))
+    return 0;
+  
+  /* Gateway is on a directly attached network, done */
+  if (match->type == ZEBRA_ROUTE_CONNECT)
+    return 1;
+  
+  /* IP gateway is off-link - can we try recursion? */
+  if (!CHECK_FLAG (rib->flags, ZEBRA_FLAG_INTERNAL))
+    return 0;
+  
+  for (newhop = match->nexthop; newhop; newhop = newhop->next)
+    if (CHECK_FLAG (newhop->flags, NEXTHOP_FLAG_FIB)
+        && !CHECK_FLAG (newhop->flags, NEXTHOP_FLAG_RECURSIVE))
+      {
+        if (set)
+          {
+            SET_FLAG (nexthop->flags, NEXTHOP_FLAG_RECURSIVE);
+            
+            if (newhop->gate)
+              {
+                if (!nexthop->rgate)
+                  nexthop->rgate = prefix_new ();
+                prefix_copy (nexthop->rgate, newhop->gate);
+              }
+            
+            if (newhop->ifindex != IFINDEX_INTERNAL)
+              nexthop->rifindex = newhop->ifindex;
+          }
+        return 1;
+      }
+
   return 0;
 }
 
@@ -461,7 +476,6 @@ nexthop_gate_active (struct rib *rib, struct nexthop *nexthop, int set,
  *
  * The return value is the final value of 'ACTIVE' flag.
  */
-
 static int
 nexthop_active_check (struct route_node *rn, struct rib *rib,
 		      struct nexthop *nexthop, int set)
@@ -535,14 +549,19 @@ nexthop_active_update (struct route_node *rn, struct rib *rib, int set)
   for (nexthop = rib->nexthop; nexthop; nexthop = nexthop->next)
   {
     int prev_active = CHECK_FLAG (nexthop->flags, NEXTHOP_FLAG_ACTIVE);
-    ifindex_t prev_index = nexthop->ifindex;
-    int new_active = nexthop_active_check (rn, rib, nexthop, set);
+    int new_active;
+    struct nexthop oldnh;
+    
+    nexthop_copy (&oldnh, nexthop);
+    new_active = nexthop_active_check (rn, rib, nexthop, set);
     
     if (new_active)
       rib->nexthop_active_num++;
     
-    if (prev_active != new_active || prev_index != nexthop->ifindex)
+    if (prev_active != new_active || !nexthop_same (&oldnh, nexthop))
       SET_FLAG (rib->flags, ZEBRA_FLAG_CHANGED);
+      
+    nexthop_scrub (&oldnh);
   }
   
   return rib->nexthop_active_num;
@@ -1200,7 +1219,7 @@ rib_add (zebra_route_t type, int flags, struct prefix *p,
       if (type == ZEBRA_ROUTE_BGP && CHECK_FLAG (flags, ZEBRA_FLAG_IBGP))
 	distance = 200;
     }
-
+  
   /* Lookup route node.*/
   rn = route_node_get (table, (struct prefix *) p);
 
@@ -1660,6 +1679,9 @@ static_init (struct static_route *si, struct prefix *gate,
   if (CHECK_FLAG (si->flags, ZEBRA_FLAG_BLACKHOLE))
     return;
   
+  /* allow recursion for statics */
+  SET_FLAG (si->flags, ZEBRA_FLAG_INTERNAL);
+  
   if (ifname && strcasecmp (ifname, "Null0") == 0)
     {
       SET_FLAG (si->flags, ZEBRA_FLAG_BLACKHOLE);
@@ -1876,7 +1898,9 @@ static_add (struct prefix *p, struct prefix *gate,
 
   /* Install into rib. */
   static_install (p, si);
-
+  
+  /* Scan for possible recursive route changes */
+  rib_update ();
   return 1;
 }
 
@@ -1938,6 +1962,8 @@ static_delete (struct prefix *p, struct prefix *gate, const char *ifname,
 
   route_unlock_node (rn);
 
+  /* Scan for possible recursive route changes */
+  rib_update ();
   return 1;
 }
 
