@@ -29,25 +29,29 @@ Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 #include "bgpd/bgp_ecommunity.h"
 #include "bgpd/bgp_aspath.h"
 
-/* Hash of community attribute. */
-static struct hash *ecomhash;
+/* ecommunity attribute object context. */
+static const struct object_ctx *comobj_ctx;
 
 /* Allocate a new ecommunities.  */
 static struct ecommunity *
 ecommunity_new (void)
 {
-  return (struct ecommunity *) XCALLOC (MTYPE_ECOMMUNITY,
-					sizeof (struct ecommunity));
+  return object_new (comobj_ctx);
 }
 
-/* Allocate ecommunities.  */
+static void
+ecommunity_clean (struct ecommunity *ecom)
+{
+  if (ecom->val)
+    XFREE (MTYPE_ECOMMUNITY_VAL, ecom->val);
+  if (ecom->str)
+    XFREE (MTYPE_ECOMMUNITY_STR, ecom->str);
+}
+
 void
 ecommunity_free (struct ecommunity **ecom)
 {
-  if ((*ecom)->val)
-    XFREE (MTYPE_ECOMMUNITY_VAL, (*ecom)->val);
-  if ((*ecom)->str)
-    XFREE (MTYPE_ECOMMUNITY_STR, (*ecom)->str);
+  ecommunity_clean (*ecom);
   XFREE (MTYPE_ECOMMUNITY, *ecom);
   ecom = NULL;
 }

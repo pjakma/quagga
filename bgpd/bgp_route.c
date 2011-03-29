@@ -4395,7 +4395,6 @@ bgp_aggregate_route (struct bgp *bgp, struct prefix *p, struct bgp_info *rinew,
   struct aspath *aspath = NULL;
   struct aspath *asmerge = NULL;
   struct community *community = NULL;
-  struct community *commerge = NULL;
   struct in_addr nexthop;
   u_int32_t med = 0;
   struct bgp_info *ri;
@@ -4485,12 +4484,7 @@ bgp_aggregate_route (struct bgp *bgp, struct prefix *p, struct bgp_info *rinew,
 		    if (ri->attr->community)
 		      {
 			if (community)
-			  {
-			    commerge = community_merge (community,
-							ri->attr->community);
-			    community = community_uniq_sort (commerge);
-			    community_free (commerge);
-			  }
+                          community_merge (community, ri->attr->community);
 			else
 			  community = community_dup (ri->attr->community);
 		      }
@@ -4526,12 +4520,7 @@ bgp_aggregate_route (struct bgp *bgp, struct prefix *p, struct bgp_info *rinew,
 	  if (rinew->attr->community)
 	    {
 	      if (community)
-		{
-		  commerge = community_merge (community,
-					      rinew->attr->community);
-		  community = community_uniq_sort (commerge);
-		  community_free (commerge);
-		}
+                community_merge (community, rinew->attr->community);
 	      else
 		community = community_dup (rinew->attr->community);
 	    }
@@ -4546,7 +4535,8 @@ bgp_aggregate_route (struct bgp *bgp, struct prefix *p, struct bgp_info *rinew,
       new->sub_type = BGP_ROUTE_AGGREGATE;
       new->peer = bgp->peer_self;
       SET_FLAG (new->flags, BGP_INFO_VALID);
-      new->attr = bgp_attr_aggregate_intern (bgp, origin, aspath, community, aggregate->as_set);
+      new->attr = bgp_attr_aggregate_intern (bgp, origin, aspath, community,
+                                             aggregate->as_set);
       new->uptime = bgp_clock ();
 
       bgp_info_add (rn, new);
@@ -4687,12 +4677,7 @@ bgp_aggregate_add (struct bgp *bgp, struct prefix *p, afi_t afi, safi_t safi,
 		    if (ri->attr->community)
 		      {
 			if (community)
-			  {
-			    commerge = community_merge (community,
-							ri->attr->community);
-			    community = community_uniq_sort (commerge);
-			    community_free (commerge);
-			  }
+                          community_merge (community, ri->attr->community);
 			else
 			  community = community_dup (ri->attr->community);
 		      }
@@ -4717,7 +4702,8 @@ bgp_aggregate_add (struct bgp *bgp, struct prefix *p, afi_t afi, safi_t safi,
       new->sub_type = BGP_ROUTE_AGGREGATE;
       new->peer = bgp->peer_self;
       SET_FLAG (new->flags, BGP_INFO_VALID);
-      new->attr = bgp_attr_aggregate_intern (bgp, origin, aspath, community, aggregate->as_set);
+      new->attr = bgp_attr_aggregate_intern (bgp, origin, aspath, community,
+                                             aggregate->as_set);
       new->uptime = bgp_clock ();
 
       bgp_info_add (rn, new);

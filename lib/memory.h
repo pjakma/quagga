@@ -48,7 +48,7 @@ extern struct mlist mlists[];
 #define XFREE(mtype, ptr) \
   do { \
     mtype_zfree (__FILE__, __LINE__, (mtype), (ptr)); \
-    ptr = NULL; } \
+    (ptr) = NULL; } \
   while (0)
 #define XSTRDUP(mtype, str) \
   mtype_zstrdup (__FILE__, __LINE__, (mtype), (str))
@@ -58,7 +58,7 @@ extern struct mlist mlists[];
 #define XREALLOC(mtype, ptr, size) zrealloc ((mtype), (ptr), (size))
 #define XFREE(mtype, ptr)          do { \
                                      zfree ((mtype), (ptr)); \
-                                     ptr = NULL; } \
+                                     (ptr) = NULL; } \
                                    while (0)
 #define XSTRDUP(mtype, str)        zstrdup ((mtype), (str))
 #endif /* MEMORY_LOG */

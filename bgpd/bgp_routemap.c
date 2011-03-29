@@ -39,6 +39,7 @@ Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 #endif /* HAVE_LIBPCREPOSIX */
 #include "buffer.h"
 #include "sockunion.h"
+#include "object.h"
 
 #include "bgpd/bgpd.h"
 #include "bgpd/bgp_table.h"
@@ -1337,45 +1338,34 @@ route_set_community (void *rule, struct prefix *prefix,
   struct rmap_com_set *rcs;
   struct bgp_info *binfo;
   struct attr *attr;
-  struct community *new = NULL;
-  struct community *old;
-  struct community *merge;
+  struct community *merge = NULL;
   
   if (type == RMAP_BGP)
     {
       rcs = rule;
       binfo = object;
       attr = binfo->attr;
-      old = attr->community;
 
       /* "none" case.  */
       if (rcs->none)
 	{
 	  attr->flag &= ~(ATTR_FLAG_BIT (BGP_ATTR_COMMUNITIES));
-	  attr->community = NULL;
+	  community_deref (&attr->community);
 	  return RMAP_OKAY;
 	}
 
       /* "additive" case.  */
-      if (rcs->additive && old)
+      if (rcs->additive && attr->community)
 	{
-	  merge = community_merge (community_dup (old), rcs->com);
-	  
-	  /* HACK: if the old community is not intern'd, 
-           * we should free it here, or all reference to it may be lost.
-           * Really need to cleanup attribute caching sometime.
-           */
-	  if (old->refcnt == 0)
-	    community_free (old);
-	  new = community_uniq_sort (merge);
+	  merge = object_dup (attr->community);
+	  community_merge (merge, rcs->com);
 	  community_free (merge);
 	}
       else
-	new = community_dup (rcs->com);
+	merge = community_dup (rcs->com);
       
-      /* will be interned by caller if required */
-      attr->community = new;
-
+      community_swap (attr->community, merge);
+      
       attr->flag |= ATTR_FLAG_BIT (BGP_ATTR_COMMUNITIES);
     }
 
@@ -1451,8 +1441,6 @@ route_set_community_delete (void *rule, struct prefix *prefix,
 {
   struct community_list *list;
   struct community *merge;
-  struct community *new;
-  struct community *old;
   struct bgp_info *binfo;
 
   if (type == RMAP_BGP)
@@ -1462,30 +1450,21 @@ route_set_community_delete (void *rule, struct prefix *prefix,
 
       binfo = object;
       list = community_list_lookup (bgp_clist, rule, COMMUNITY_LIST_MASTER);
-      old = binfo->attr->community;
 
-      if (list && old)
+      if (list && binfo->attr->community)
 	{
-	  merge = community_list_match_delete (community_dup (old), list);
-	  new = community_uniq_sort (merge);
-	  community_free (merge);
-
-	  /* HACK: if the old community is not intern'd,
-	   * we should free it here, or all reference to it may be lost.
-	   * Really need to cleanup attribute caching sometime.
-	   */
-	  if (old->refcnt == 0)
-	    community_free (old);
-
-	  if (new->size == 0)
+	  merge = community_dup (binfo->attr->community);
+	  merge = community_list_match_delete (merge, list);
+	  
+	  if (merge->size == 0)
 	    {
-	      binfo->attr->community = NULL;
+	      community_deref (&binfo->attr->community);
 	      binfo->attr->flag &= ~ATTR_FLAG_BIT (BGP_ATTR_COMMUNITIES);
-	      community_free (new);
+	      community_free (merge);
 	    }
 	  else
 	    {
-	      binfo->attr->community = new;
+	      community_swap (binfo->attr->community, merge);
 	      binfo->attr->flag |= ATTR_FLAG_BIT (BGP_ATTR_COMMUNITIES);
 	    }
 	}

@@ -70,6 +70,7 @@ struct memory_list memory_list_lib[] =
   { MTYPE_PQUEUE,		"Priority queue"		},
   { MTYPE_PQUEUE_DATA,		"Priority queue data"		},
   { MTYPE_HOST,			"Host config"			},
+  { MTYPE_OBJ_CTX,		"Object type context"		},
   { -1, NULL },
 };
 

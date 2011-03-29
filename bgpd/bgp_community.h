@@ -21,6 +21,8 @@ Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 #ifndef _QUAGGA_BGP_COMMUNITY_H
 #define _QUAGGA_BGP_COMMUNITY_H
 
+#include "hash.h"
+
 /* Communities attribute.  */
 struct community 
 {
@@ -54,21 +56,21 @@ struct community
 extern void community_init (void);
 extern void community_finish (void);
 extern void community_free (struct community *);
-extern struct community *community_uniq_sort (struct community *);
+extern struct community *community_dup (const struct community *);
 extern struct community *community_parse (u_int32_t *, u_short);
-extern struct community *community_intern (struct community *);
-extern void community_unintern (struct community **);
+extern const struct community *community_ref (struct community *);
+extern void community_deref (struct community **);
+extern void community_swap (struct community *old, struct community *com);
+extern unsigned int community_hash_make (const struct community *);
 extern char *community_str (struct community *);
-extern unsigned int community_hash_make (struct community *);
 extern struct community *community_str2com (const char *);
 extern int community_match (const struct community *, const struct community *);
 extern int community_cmp (const struct community *, const struct community *);
-extern struct community *community_merge (struct community *, struct community *);
+extern struct community *community_merge (struct community *, const struct community *);
 extern struct community *community_delete (struct community *, struct community *);
-extern struct community *community_dup (struct community *);
-extern int community_include (struct community *, u_int32_t);
+extern int community_include (const struct community *, u_int32_t);
 extern void community_del_val (struct community *, u_int32_t *);
 extern unsigned long community_count (void);
-extern struct hash *community_hash (void);
+extern void community_iterate (void (*) (struct hash_backet *, void *), void *);
 
 #endif /* _QUAGGA_BGP_COMMUNITY_H */

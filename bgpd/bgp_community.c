@@ -22,28 +22,34 @@ Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 
 #include "hash.h"
 #include "memory.h"
+#include "object.h"
 
 #include "bgpd/bgp_community.h"
 
-/* Hash of community attribute. */
-static struct hash *comhash;
+/* community attribute object context. */
+static const struct object_ctx *comobj_ctx;
 
-/* Allocate a new communities value.  */
 static struct community *
 community_new (void)
 {
-  return (struct community *) XCALLOC (MTYPE_COMMUNITY,
-				       sizeof (struct community));
+  return object_new (comobj_ctx);
 }
 
 /* Free communities value.  */
-void
-community_free (struct community *com)
+static void
+community_clean (void *v)
 {
+  struct community *com = v;
   if (com->val)
     XFREE (MTYPE_COMMUNITY_VAL, com->val);
   if (com->str)
     XFREE (MTYPE_COMMUNITY_STR, com->str);
+}
+
+void
+community_free (struct community *com)
+{
+  community_clean (com);
   XFREE (MTYPE_COMMUNITY, com);
 }
 
@@ -131,7 +137,7 @@ community_compare (const void *a1, const void *a2)
 }
 
 int
-community_include (struct community *com, u_int32_t val)
+community_include (const struct community *com, u_int32_t val)
 {
   int i;
 
@@ -145,12 +151,11 @@ community_include (struct community *com, u_int32_t val)
 }
 
 static u_int32_t
-community_val_get (struct community *com, int i)
+community_val_get (const struct community *com, int i)
 {
-  u_char *p;
+  u_char *p = (u_char *) com->val;
   u_int32_t val;
 
-  p = (u_char *) com->val;
   p += (i * 4);
 
   memcpy (&val, p, sizeof (u_int32_t));
@@ -158,30 +163,52 @@ community_val_get (struct community *com, int i)
   return ntohl (val);
 }
 
+static void
+community_val_set (const struct community *com, u_int32_t val, int i)
+{
+  u_char *p;
+  u_int32_t lav = htonl (val);
+
+  p = (u_char *) com->val;
+  p += (i * 4);
+
+  memcpy (p, &lav, sizeof (u_int32_t));
+}
+
+
 /* Sort and uniq given community. */
-struct community *
+static void
 community_uniq_sort (struct community *com)
 {
-  int i;
-  struct community *new;
+  int i, tail;
   u_int32_t val;
-
-  if (! com)
-    return NULL;
   
-  new = community_new ();;
+  if (!com)
+    return;
   
-  for (i = 0; i < com->size; i++)
+  if (com->size == 0)
+    return;
+  
+  qsort (com->val, com->size, sizeof (u_int32_t), community_compare);
+  
+  for (i = 1, tail = 0; i < com->size; i++)
     {
       val = community_val_get (com, i);
-
-      if (! community_include (new, val))
-	community_add_val (new, val);
+      
+      if (community_val_get (com, tail) == val)
+        continue;
+      
+      tail++;
+      
+      if ((i - tail) == 1)
+        continue;
+      
+      community_val_set (com, val, tail);
     }
-
-  qsort (new->val, new->size, sizeof (u_int32_t), community_compare);
-
-  return new;
+  
+  com->size = tail + 1;
+  
+  return;
 }
 
 /* Convert communities attribute to string.
@@ -195,7 +222,7 @@ community_uniq_sort (struct community *com)
 
    For other values, "AS:VAL" format is used.  */
 static char *
-community_com2str  (struct community *com)
+community_com2str  (const struct community *const com)
 {
   int i;
   char *str;
@@ -292,59 +319,29 @@ community_com2str  (struct community *com)
   return str;
 }
 
-/* Intern communities attribute.  */
-struct community *
-community_intern (struct community *com)
+const struct community *
+community_ref (struct community *com)
 {
-  struct community *find;
-
-  /* Assert this community structure is not interned. */
-  assert (com->refcnt == 0);
-
-  /* Lookup community hash. */
-  find = (struct community *) hash_get (comhash, com, hash_alloc_intern);
-
-  /* Arguemnt com is allocated temporary.  So when it is not used in
-     hash, it should be freed.  */
-  if (find != com)
-    community_free (com);
-
-  /* Increment refrence counter.  */
-  find->refcnt++;
-
-  /* Make string.  */
-  if (! find->str)
-    find->str = community_com2str (find);
-
-  return find;
+  return object_ref (com);
 }
 
-/* Free community attribute. */
 void
-community_unintern (struct community **com)
+community_deref (struct community **com)
 {
-  struct community *ret;
+  object_deref (*com);
+  *com = NULL;
+}
 
-  if ((*com)->refcnt)
-    (*com)->refcnt--;
-
-  /* Pull off from hash.  */
-  if ((*com)->refcnt == 0)
-    {
-      /* Community value com must exist in hash. */
-      ret = (struct community *) hash_release (comhash, *com);
-      assert (ret != NULL);
-
-      community_free (*com);
-      *com = NULL;
-    }
+void
+community_swap (struct community *old, struct community *com)
+{
+  object_ref_swap (old, com);
 }
 
 /* Create new community attribute. */
 struct community *
 community_parse (u_int32_t *pnt, u_short length)
 {
-  struct community tmp;
   struct community *new;
 
   /* If length is malformed return NULL. */
@@ -352,20 +349,28 @@ community_parse (u_int32_t *pnt, u_short length)
     return NULL;
 
   /* Make temporary community for hash look up. */
-  tmp.size = length / 4;
-  tmp.val = pnt;
+  new = object_new (comobj_ctx);
+  new->val = XREALLOC (MTYPE_COMMUNITY_VAL, new->val, length);
+  new->size = length / 4;
+  memcpy (new->val, pnt, length);
 
-  new = community_uniq_sort (&tmp);
+  community_uniq_sort (new);
 
-  return community_intern (new);
+  return new;
 }
 
 struct community *
-community_dup (struct community *com)
+community_dup (const struct community *com)
 {
-  struct community *new;
+  return object_dup (com);
+}
 
-  new = XCALLOC (MTYPE_COMMUNITY, sizeof (struct community));
+static void *
+community_dup_obj (void *dst, const void *src)
+{
+  struct community *new = dst;
+  const struct community *com = src;
+  
   new->size = com->size;
   if (new->size)
     {
@@ -374,6 +379,7 @@ community_dup (struct community *com)
     }
   else
     new->val = NULL;
+  
   return new;
 }
 
@@ -391,8 +397,14 @@ community_str (struct community *com)
 
 /* Make hash value of community attribute. This function is used by
    hash package.*/
+static unsigned int
+community_hash_make_obj (const void *v)
+{
+  return community_hash_make (v);
+}
+
 unsigned int
-community_hash_make (struct community *com)
+community_hash_make (const struct community *com)
 {
   int c;
   unsigned int key;
@@ -452,9 +464,15 @@ community_cmp (const struct community *com1, const struct community *com2)
   return 0;
 }
 
+static bool
+community_cmp_obj (const void *com1, const void *com2)
+{
+  return community_cmp (com1, com2) == 1 ? true : false;
+}
+
 /* Add com2 to the end of com1. */
 struct community *
-community_merge (struct community *com1, struct community *com2)
+community_merge (struct community *com1, const struct community *com2)
 {
   if (com1->val)
     com1->val = XREALLOC (MTYPE_COMMUNITY_VAL, com1->val, 
@@ -464,7 +482,9 @@ community_merge (struct community *com1, struct community *com2)
 
   memcpy (com1->val + com1->size, com2->val, com2->size * 4);
   com1->size += com2->size;
-
+  
+  community_uniq_sort (com1);
+  
   return com1;
 }
 
@@ -581,7 +601,6 @@ struct community *
 community_str2com (const char *str)
 {
   struct community *com = NULL;
-  struct community *com_sort = NULL;
   u_int32_t val = 0;
   enum community_token token = community_token_unknown;
 
@@ -610,37 +629,43 @@ community_str2com (const char *str)
   if (! com)
     return NULL;
 
-  com_sort = community_uniq_sort (com);
-  community_free (com);
+  community_uniq_sort (com);
 
-  return com_sort;
+  return com;
 }
 
 /* Return communities hash entry count.  */
 unsigned long
 community_count (void)
 {
-  return comhash->count;
+  return object_num_cached (comobj_ctx);
 }
 
-/* Return communities hash.  */
-struct hash *
-community_hash (void)
+/* Iterate over communities.  */
+void
+community_iterate (void (*func) (struct hash_backet *, void *), void *arg)
 {
-  return comhash;
+  object_iterate (comobj_ctx, func, arg);
 }
 
-/* Initialize comminity related hash. */
+/* Initialize community related hash. */
 void
 community_init (void)
 {
-  comhash = hash_create ((unsigned int (*) (void *))community_hash_make,
-			 (int (*) (const void *, const void *))community_cmp);
+  struct object_table tmp =
+  {
+    .size = sizeof (struct community),
+    .finish = &community_clean,
+    .equal = &community_cmp_obj,
+    .hash_key = community_hash_make_obj,
+    .dup = community_dup_obj,
+    .memtype = MTYPE_COMMUNITY,
+  };
+  comobj_ctx = object_init (&tmp);
 }
 
 void
 community_finish (void)
 {
-  hash_free (comhash);
-  comhash = NULL;
+  object_finish (comobj_ctx);
 }

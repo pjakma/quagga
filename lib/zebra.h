@@ -47,6 +47,7 @@ typedef int socklen_t;
 #include <string.h>
 #include <pwd.h>
 #include <grp.h>
+#include <stdbool.h>
 #ifdef HAVE_STROPTS_H
 #include <stropts.h>
 #endif /* HAVE_STROPTS_H */

@@ -29,6 +29,7 @@ Software Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA
 #include "log.h"
 #include "hash.h"
 #include "jhash.h"
+#include "object.h"
 
 #include "bgpd/bgpd.h"
 #include "bgpd/bgp_attr.h"
@@ -490,13 +491,6 @@ bgp_attr_intern (struct attr *attr)
       else
 	attr->aspath->refcnt++;
     }
-  if (attr->community)
-    {
-      if (! attr->community->refcnt)
-	attr->community = community_intern (attr->community);
-      else
-	attr->community->refcnt++;
-    }
   if (attr->extra)
     {
       struct attr_extra *attre = attr->extra;
@@ -634,7 +628,7 @@ bgp_attr_unintern_sub (struct attr *attr)
   UNSET_FLAG(attr->flag, BGP_ATTR_AS_PATH);
   
   if (attr->community)
-    community_unintern (&attr->community);
+    community_deref (&attr->community);
   UNSET_FLAG(attr->flag, BGP_ATTR_COMMUNITIES);
   
   if (attr->extra)

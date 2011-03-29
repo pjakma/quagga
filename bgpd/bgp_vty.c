@@ -8030,10 +8030,9 @@ DEFUN (show_ip_bgp_community_info,
 {
   vty_out (vty, "Address Refcnt Community%s", VTY_NEWLINE);
 
-  hash_iterate (community_hash (), 
-		(void (*) (struct hash_backet *, void *))
-		community_show_all_iterator,
-		vty);
+  community_iterate ((void (*) (struct hash_backet *, void *))
+		     community_show_all_iterator,
+		     vty);
 
   return CMD_SUCCESS;
 }
